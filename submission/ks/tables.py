@@ -281,7 +281,7 @@ def table_to_facts(table: Table, url: str, snapshot_id: str, authority: int, pag
         business = business_page or "business" in low_prod or "business" in low_label
         if business and family == "credit_card" and "business" not in low_prod:
             product = "Business " + product
-        term = _term(term_text, product_text, tier_text if family not in ("auto", "atv") else "")
+        term = _term(term_text, product_text, tier_text)
         model_years = _model_years(tier_text) or _model_years(product_text)
         rng = _money_range(tier_text) or (_money_range(product_text) if family in ("mortgage", "ira") else None)
         balance = rng if family in ("savings", "money_market", "hsa", "checking", "ira") else None
