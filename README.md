@@ -9,7 +9,7 @@ not say. [`NOTES.md`](NOTES.md) explains the approach.
 ```
 submission/          the solution (solution.py with build(), package ks/)
 harness/             the organisers' scorer, unchanged
-eval/                the 40 practice questions, unchanged
+eval/                the 40 practice questions (unchanged) plus extra_eval.jsonl, 35 regression questions of our own
 starter/             the organisers' naive baseline, unchanged
 tests/               unit tests on synthetic fixtures
 docs/                design notes and kit README
@@ -28,17 +28,25 @@ pip install -r requirements.txt
 python harness/run_eval.py --submission submission --eval eval/public_eval.jsonl
 ```
 
-To turn the optional LLM parser on, set `ANTHROPIC_API_KEY`. Without it, the rule-based parser handles
-every question.
+The optional LLM parser turns on only when `ANTHROPIC_API_KEY` is set in the environment of the process running
+the scorer; no key is stored in the repository. Without it, the rule-based parser handles every question.
+`KS_DISABLE_LLM=1` forces the offline path even when a key is present.
 
 ## Quality checks
 
 ```bash
 pip install pytest ruff
-ruff check submission tests        # lint, config in pyproject.toml
-python -m pytest                   # 62 unit and end-to-end tests on synthetic fixtures (90% line coverage)
+scripts/check.sh                   # lint, 64 tests (90% line coverage), harness self-test, both question sets
+```
+
+Or step by step:
+
+```bash
+ruff check submission tests
+python -m pytest
 python harness/run_eval.py --submission submission --snapshots harness/selftest/snapshots \
     --eval harness/selftest/eval.jsonl --conflicts-gold harness/selftest/conflicts_gold.json
+python harness/run_eval.py --submission submission --eval eval/extra_eval.jsonl --repeat-sample 0
 ```
 
 The GitHub Actions workflow in `.github/workflows/ci.yml` runs all three on Python 3.9, 3.11 and 3.12. The real

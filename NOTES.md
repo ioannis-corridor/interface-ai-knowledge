@@ -78,24 +78,31 @@ Sibling tiers that went stale together are one entry. Each entry names the winni
 
 ## API keys
 
-None are required. If `ANTHROPIC_API_KEY` is set, the system makes one call to `claude-haiku-5-5` for a
-question the rules cannot classify. The call returns a structured query only. It never sees website text
-and never writes answer text. Set `KS_DISABLE_LLM=1` to turn it off, or `KS_LLM_MODEL` to change the model.
-Measured on the practice set, the call changes no answers and adds about 0.8 seconds at p95 for the few
-questions that use it.
+None are required, and nothing in this repository contains one. The system runs fully offline on the snapshots.
+
+If the environment variable `ANTHROPIC_API_KEY` is set when the scorer runs (for example `export
+ANTHROPIC_API_KEY=... && python harness/run_eval.py ...`), the system makes one call to `claude-haiku-5-5`
+for a question the rules cannot classify. The call returns a structured query only. It never sees website text
+and never writes answer text. Each call has a 3-second cap; on a timeout or any error the rules answer. Set
+`KS_DISABLE_LLM=1` to force the offline path, or `KS_LLM_MODEL` to change the model. Measured on the practice
+set, the call changes no answers and adds about 0.8 seconds at p95 for the few questions that use it. This is a
+paid API; the kit's own `--judge` option reads the same variable.
 
 ## Results
 
 | Set | Score |
 | --- | --- |
-| Practice set (40 questions) | 0.969; the one miss has an empty `must_include` list and needs the LLM judge |
+| Practice set (40 questions, `eval/public_eval.jsonl`) | 0.969; the one miss has an empty `must_include` list and needs the LLM judge |
 | Harness self-test fixture (synthetic site, conflicts gold) | 1.0 |
-| Private paraphrase, as-of and change set (35 questions, not committed) | 1.0 |
+| Extra paraphrase, as-of, change and fee set (35 questions, `eval/extra_eval.jsonl`) | 1.0 |
+
+The extra set was written from reading the snapshots, before the system handled those cases, and is used as a
+regression set. `scripts/check.sh` runs lint, the unit tests, the self-test and both question sets.
 
 ## Code quality
 
 - `ruff check submission tests` passes with the rule set in `pyproject.toml`.
-- 62 tests on synthetic fixtures cover table parsing, prose extraction, the query parser, the store and index,
+- 64 tests on synthetic fixtures cover table parsing, prose extraction, the query parser, the store and index,
   conflicts, the LLM merge (stubbed client), every answer handler, and two-snapshot end-to-end flows. Line
   coverage is 90%.
 - CI runs lint, tests and the harness self-test on Python 3.9, 3.11 and 3.12.

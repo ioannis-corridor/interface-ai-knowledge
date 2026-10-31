@@ -102,3 +102,14 @@ def test_query_entities_and_dates():
 def test_tokenizer_and_number_fingerprint():
     assert tokenize("Our CDs and car loans") == ["certificate", "auto", "loan"]
     assert numbers_in("5.39% APR and $1,000 minimum") == {("%", 5.39), ("$", 1000.0)}
+
+
+def test_parse_iso_accepts_strings_and_date_objects():
+    from datetime import datetime
+
+    from ks.text import parse_iso
+    assert parse_iso("2026-05-31") == date(2026, 5, 31)
+    assert parse_iso("2026-05-31T23:59:00Z") == date(2026, 5, 31)
+    assert parse_iso(date(2026, 5, 31)) == date(2026, 5, 31)
+    assert parse_iso(datetime(2026, 5, 31, 12, 0)) == date(2026, 5, 31)
+    assert parse_iso("not a date") is None and parse_iso(None) is None
