@@ -143,7 +143,14 @@ def _roles(header: List[str]) -> dict:
 
 
 def detect_family(label: str, section: str, product: str, tier: str, header: str, url: str) -> Optional[str]:
-    blob = " ".join([label, section, product, header]).lower()
+    """The table's own label and cells decide first; the section heading above is only a fallback."""
+    fam = _detect_family(" ".join([label, product, header]).lower(), product, tier, label, url, use_url=False)
+    if fam:
+        return fam
+    return _detect_family(" ".join([label, section, product, header]).lower(), product, tier, label + " " + section, url, use_url=True)
+
+
+def _detect_family(blob: str, product: str, tier: str, label_blob: str, url: str, use_url: bool) -> Optional[str]:
     prod = product.lower()
     if "ira" in blob.split() or "ira type" in blob or re.search(r"\b(roth|traditional)\b", prod):
         return "ira"
@@ -155,10 +162,10 @@ def detect_family(label: str, section: str, product: str, tier: str, header: str
         return "hsa"
     if "checking" in blob:
         return "checking"
-    if "card type" in header.lower() or "visa" in blob or "credit card" in blob:
+    if "card type" in blob or "visa" in blob or "credit card" in blob:
         return "credit_card"
     if "model year" in (tier + " " + prod).lower():
-        low = (label + " " + section).lower()
+        low = label_blob.lower()
         if re.search(r"\b(boat|rv|camper|recreational)\b", low):
             return "boat_rv"
         if re.search(r"\b(atv|snowmobile|jet ski|utv)\b", low):
@@ -180,6 +187,8 @@ def detect_family(label: str, section: str, product: str, tier: str, header: str
         return "atv"
     if "savings" in blob or "holiday club" in blob or "launchpad" in blob:
         return "savings"
+    if not use_url:
+        return None
     hint = url_family(url)
     if hint == "deposit":
         return "savings"

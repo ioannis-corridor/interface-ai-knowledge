@@ -45,8 +45,14 @@ def _clean_branch(name: str) -> Optional[str]:
     return " ".join(out)
 
 
+LOCATED_RE = re.compile(r"The\s+([A-Z][\w'.-]+(?:\s+(?:Avenue|Street|Ave\.?|St\.?|Road|Rd\.?))?)\s+(?:[A-Z][\w'.&-]+\s+){0,3}branch\s+is\s+located\s+at\s+(\d{2,5}\s+[A-Z][^.,\n]{3,60})")
+
+
 def _branch_name(title: str, text: str) -> Optional[str]:
-    m = re.search(r"The\s+([A-Z][\w'.-]+(?:\s+[A-Z][\w'.-]+){0,3})\s+Dupaco\s+branch", text)
+    m = LOCATED_RE.search(text)
+    if m and _clean_branch(m.group(1)):
+        return _clean_branch(m.group(1))
+    m = re.search(r"The\s+([A-Z][\w'.-]+)\s+(?:[A-Z][\w'.&-]+\s+){0,3}branch\b", text)
     if m and _clean_branch(m.group(1)):
         return _clean_branch(m.group(1))
     m = re.search(r"(?:branch|learning lab)\s+(?:in|at)\s+([A-Z][\w'.-]+(?:\s+[A-Z][\w'.-]+)?)", text)
@@ -139,10 +145,11 @@ def extract_entities(markdown: str, url: str, title: str, sid: str, authority: i
             facts.append(_mk("entity", f"{city} branch", "address", f"{street}, {city}, {state} {zipc}", url, sid,
                              auth, m.group(0), f"{city} branch address {street}", page_date, fetched,
                              city=city, street=street))
-    m = re.search(r"The\s+([A-Z][\w'.-]+(?:\s+[A-Z][\w'.-]+){0,3})\s+Dupaco\s+branch\s+is\s+located\s+at\s+(\d{2,5}\s+[A-Z][^.,\n]{3,60})", plain)
-    if m:
-        facts.append(_mk("entity", f"{m.group(1)} branch", "address", m.group(2), url, sid, authority, m.group(0),
-                         f"{m.group(1)} branch address", page_date, fetched, city=m.group(1), street=m.group(2)))
+    m = LOCATED_RE.search(plain)
+    if m and _clean_branch(m.group(1)):
+        b = _clean_branch(m.group(1))
+        facts.append(_mk("entity", f"{b} branch", "address", m.group(2), url, sid, authority, m.group(0),
+                         f"{b} branch address", page_date, fetched, city=b, street=m.group(2)))
     return facts
 
 
