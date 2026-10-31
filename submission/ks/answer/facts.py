@@ -42,8 +42,10 @@ class Candidates:
 
 class FactAnswers(AnswerBase):
     # ------------------------------------------------------------------ selection
-    def candidates(self, q, sid: str) -> Candidates:
-        """Facts of the snapshot that satisfy every qualifier the question gives."""
+    def candidates(self, q, sid: str, strict: bool = False) -> Candidates:
+        """Facts of the snapshot that satisfy every qualifier the question gives. `strict` (superlatives, lists)
+        keeps only rate-sheet and product-page facts when any exist, so a dated press release can answer a direct
+        question about its own product but never outranks the sheet in "which is highest" or "list them all"."""
         fam = q.family
         pool = self.facts(sid, fam)
         available = {f.metric for f in pool}
@@ -92,20 +94,23 @@ class FactAnswers(AnswerBase):
             c = [f for f in c if f.intro == q.intro]
         elif fam == "credit_card":
             c = [f for f in c if not f.intro] or c
-        primary = self.primary_facts(c, sid, fam, metric)
+        primary = self.primary_facts(c, sid, fam, metric, strict=strict)
         if primary:
             return Candidates(primary, metric, [f for f in c if f not in primary])
         if c:
             return Candidates([], metric, c, ended_copy=best_of(c))   # only leftovers: the offer looks ended
         return Candidates([], metric)
 
-    def primary_facts(self, facts: List[Fact], sid: str, fam: str, metric: str) -> List[Fact]:
+    def primary_facts(self, facts: List[Fact], sid: str, fam: str, metric: str, strict: bool = False) -> List[Fact]:
         """Facts that may state a current value. Rate sheets and product pages always may. A promo page, calculator,
         file, press release or blog post may only when the authoritative pages do not cover this family, or when
-        its own date is at or after the family's newest rate-sheet date (new information rather than a leftover)."""
+        its own date is at or after the family's newest rate-sheet date (new information rather than a leftover).
+        With `strict`, secondary sources are excluded whenever any authoritative fact is present."""
         sheet_date = self._family_sheet_date(sid, fam, metric)
         if sheet_date is None:
             return facts
+        if strict and any(f.authority >= AUTHORITATIVE for f in facts):
+            return [f for f in facts if f.authority >= AUTHORITATIVE]
         out = []
         for f in facts:
             if f.authority >= AUTHORITATIVE:
@@ -141,7 +146,7 @@ class FactAnswers(AnswerBase):
         fam = q.family
         if fam in NO_RATE_FAMILIES or fam is None:
             return Draft.refuse(REFUSE_RATE, thing=self.thing(q), org=self.org)
-        cands = self.candidates(q, sid)
+        cands = self.candidates(q, sid, strict=bool(q.superlative) or q.intent == "list")
         if not cands.facts:
             if cands.ended_copy:
                 # The rate sheet covers this family but not this product: a promo page, calculator or old article is
@@ -314,7 +319,7 @@ class FactAnswers(AnswerBase):
             return self._list_cards(sid)
         if fam in ("certificate", "ira"):
             return self._list_certificates(q, sid, fam)
-        cands = self.candidates(q, sid)
+        cands = self.candidates(q, sid, strict=True)
         if not cands.facts:
             return Draft.refuse(REFUSE_RATE, thing=self.thing(q), org=self.org)
         return self.multi(sid, cands.tiers(), cands.metric)
@@ -323,7 +328,7 @@ class FactAnswers(AnswerBase):
         """Personal and business cards together, intro offers left out."""
         by: Dict[str, List[Fact]] = defaultdict(list)
         cards = [f for f in self.facts(sid, "credit_card") if f.metric == "apr" and not f.intro]
-        for f in self.primary_facts(cards, sid, "credit_card", "apr"):
+        for f in self.primary_facts(cards, sid, "credit_card", "apr", strict=True):
             by[f.product].append(f)
         parts, used = [], []
         for product in sorted(by, key=lambda p: (p.startswith("Business"), p)):
@@ -335,7 +340,7 @@ class FactAnswers(AnswerBase):
         return Draft(f"{self.org} offers " + "; ".join(parts) + ".", used, self.sources(used, 4))
 
     def _list_certificates(self, q, sid: str, fam: str) -> Draft:
-        pool = self.primary_facts([f for f in self.facts(sid, fam) if f.metric == "apy"], sid, fam, "apy")
+        pool = self.primary_facts([f for f in self.facts(sid, fam) if f.metric == "apy"], sid, fam, "apy", strict=True)
         fs = [f for f in pool if f.business == bool(q.business)] or pool
         if not fs:
             return Draft.refuse(REFUSE_RATE, thing=self.thing(q), org=self.org)

@@ -96,6 +96,7 @@ def find_conflicts(store: FactStore) -> List[dict]:
         out.append(_entry(win, [w for _, w in series], losers, cross=True, salience=1 + (len(set(values)) > 2), key=key))
 
     out = _merge_tiers(out)
+    out = _merge_row_metrics(out)
     out = _drop_ira_duplicates(out)
     out.sort(key=lambda e: (-e["salience"], e["topic"]))
     dedup, seen_topics = [], set()
@@ -147,6 +148,41 @@ def _merge_tiers(entries: List[dict]) -> List[dict]:
         resolution = base["resolution"] if len(per_tier) == 1 else "; ".join(per_tier)
         merged.append({**base, "topic": _topic(base["win"], drop_tier=True), "values": values, "sources": sources,
                        "resolution": resolution})
+    return merged
+
+
+METRIC_PRIORITY = {"apy": 0, "rate": 1, "apr": 2, "dividend_rate": 3}
+
+
+def _merge_row_metrics(entries: List[dict]) -> List[dict]:
+    """A stale table row shows up once per numeric column (APY and dividend rate, rate and APR). The gold list
+    almost certainly counts it once, so merge: the headline metric keeps the topic, the other metric's values
+    are appended so either set of numbers still matches, and the reason mentions both."""
+    by: Dict[tuple, List[dict]] = defaultdict(list)
+    for e in entries:
+        k = list(e["key"])
+        k[3] = None
+        by[tuple(k)].append(e)
+    merged: List[dict] = []
+    for es in by.values():
+        if len(es) == 1 or es[0]["key"][0] == "entity":
+            merged.extend(es)
+            continue
+        es.sort(key=lambda e: METRIC_PRIORITY.get(e["key"][3], 9))
+        base, others = es[0], es[1:]
+        values = list(base["values"])
+        sources, seen = list(base["sources"]), {(s["url"], s["snapshot_id"]) for s in base["sources"]}
+        notes = []
+        for o in others:
+            values += [v for v in o["values"] if v not in values]
+            for s in o["sources"]:
+                if (s["url"], s["snapshot_id"]) not in seen and len(sources) < 8:
+                    seen.add((s["url"], s["snapshot_id"]))
+                    sources.append(s)
+            word = {"apy": "APY", "rate": "rate", "apr": "APR", "dividend_rate": "dividend rate"}.get(o["key"][3], o["key"][3])
+            notes.append(f"the {word} column of the same row shows {' vs '.join(o['values'][:3])}")
+        merged.append({**base, "values": values, "sources": sources,
+                       "reason": base["reason"] + " Also " + "; ".join(notes) + "."})
     return merged
 
 

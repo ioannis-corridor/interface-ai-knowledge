@@ -69,3 +69,23 @@ def test_merge_llm_fills_gaps_but_never_overrides_rules():
     assert needs_llm(q)
     q = merge_llm(q, {"intent": "status", "entity": "address", "branch": "Riverside"})
     assert q.intent != "status" and q.entity is None                       # unsafe intent/entity not accepted
+
+
+def test_same_row_metrics_merge_into_one_conflict():
+    s = FactStore()
+    s.add_snapshot("01", date(2026, 5, 12))
+    s.add_snapshot("02", date(2026, 9, 28))
+    for sid in ("01", "02"):
+        s.add_page(sid, "https://x.test/rates")
+        s.add_page(sid, "https://x.test/promo")
+    # the latest crawl: the rate sheet moved to 3.40% / 3.35% while a promo page still shows the old row
+    for metric, stale, current in (("apy", "2.90%", "3.40%"), ("dividend_rate", "2.86%", "3.35%")):
+        s.add(Fact(family="certificate", product="12 Month Certificate", metric=metric, value=current,
+                   url="https://x.test/rates", snapshot_id="02", authority=100, term_months=12, quote="12 Month row"))
+        s.add(Fact(family="certificate", product="12 Month Certificate", metric=metric, value=stale,
+                   url="https://x.test/promo", snapshot_id="02", authority=40, term_months=12, quote="12 Month row"))
+    out = find_conflicts(s)
+    twelve = [e for e in out if "12-month certificate" in e["topic"]]
+    assert len(twelve) == 1 and twelve[0]["topic"].endswith("APY")
+    assert twelve[0]["values"][:2] == ["3.40%", "2.90%"] and {"3.35%", "2.86%"} <= set(twelve[0]["values"])
+    assert "dividend rate" in twelve[0]["reason"]

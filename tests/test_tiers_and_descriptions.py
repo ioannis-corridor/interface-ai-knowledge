@@ -210,3 +210,22 @@ def test_newsroom_slug_with_promo_word_stays_newsroom():
     from ks.pages import LANDING, NEWSROOM, classify
     assert classify("https://x.test/newsroom/eleven-month-special") == NEWSROOM
     assert classify("https://x.test/fall-savings-offer") == LANDING
+
+
+DATED_RELEASE = """# A new five-month special | Example CU
+2 min read
+
+[Jane Doe](https://x.test/newsroom/author/jane) September 20, 2026
+
+Example CU today introduced a 5-month certificate special with an APY of 4.75% for new money.
+"""
+
+
+def test_dated_release_answers_its_own_product_but_not_superlatives_or_lists():
+    ks = _site([("https://x.test/newsroom/five-month-special", "Special | Example CU", DATED_RELEASE)])
+    direct = ks.answer("What is the 5-month certificate special APY?")
+    assert direct.confident and "4.75%" in direct.text
+    best = ks.answer("Which certificate has the highest APY?")
+    assert "4.75" not in best.text and "4.10%" in best.text
+    listed = ks.answer("What are all your certificate rates?")
+    assert "4.75" not in listed.text and "4.10%" in listed.text

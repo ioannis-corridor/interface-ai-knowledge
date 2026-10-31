@@ -38,7 +38,7 @@ No key is stored in the repository, and the rule-based parser handles every ques
 
 ```bash
 pip install pytest ruff
-scripts/check.sh                   # lint, 71 tests (90% line coverage), harness self-test, both question sets when present
+scripts/check.sh                   # lint, 73 tests (90% line coverage), harness self-test, both question sets when present
 ```
 
 Or step by step:

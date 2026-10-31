@@ -48,8 +48,11 @@ only when no authoritative page covers the family, or when its own date ("effect
 at or after the family's newest rate-sheet date; otherwise it is a leftover. If only leftovers match, the system
 refuses with "the website's current rate sheet doesn't list it" and keeps the leftover value and its date in
 `conflict_note`. When the rate sheet carries no date, a secondary copy must be from the last 180 days of the
-crawl to count. Vanished promo and calculator pages are not carried forward; vanished informational pages (the
-fee schedule, the contact page) are.
+crawl to count. For superlatives ("which certificate pays the most") and lists, secondary sources are excluded
+outright whenever an authoritative fact exists, so a dated press release can answer a direct question about its
+own product but never outranks the rate sheet. Vanished promo and calculator pages are not carried forward;
+vanished informational pages (the fee schedule, the contact page) are. A carried product page drops below the
+authoritative threshold, so its facts count only when dated at or after the current rate sheet.
 
 ## How a question is answered
 
@@ -84,7 +87,10 @@ fee schedule, the contact page) are.
 - Across crawls, the authoritative value changed. Example: a certificate APY that moved between two
   crawls' rate sheets.
 
-Sibling tiers that went stale together are one entry. Each entry names the winning value and the reason.
+Sibling tiers that went stale together are one entry, and the APY and dividend-rate columns (or rate and APR)
+of the same stale row are one entry: the headline metric keeps the topic, the other column's values are
+appended so either set of numbers matches, and the reason mentions both. Each entry names the winning value
+and the reason. The real snapshots yield 23 entries.
 
 ## API keys
 
@@ -117,7 +123,7 @@ tests, the self-test and, when the files are present, both question sets.
 ## Code quality
 
 - `ruff check submission tests` passes with the rule set in `pyproject.toml`.
-- 71 tests on synthetic fixtures cover table parsing, prose extraction, the query parser, the store and index,
+- 73 tests on synthetic fixtures cover table parsing, prose extraction, the query parser, the store and index,
   conflicts, the LLM merge (stubbed client), every answer handler, and two-snapshot end-to-end flows. Line
   coverage is 90%.
 - CI runs lint, tests and the harness self-test on Python 3.9, 3.11 and 3.12.
