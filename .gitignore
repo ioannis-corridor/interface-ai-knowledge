@@ -1,0 +1,11 @@
+# website snapshots are shared for this event only: never commit them
+snapshots/0*
+snapshots_zip/
+# scorer output, caches, secrets
+results/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+.DS_Store
+.venv/
