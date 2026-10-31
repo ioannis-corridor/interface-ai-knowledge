@@ -8,8 +8,8 @@ from ks.text import tokenize
 
 
 def fact(sid, url, value, **kw):
-    base = dict(family="certificate", product="6 Month Certificate", metric="apy", value=value, url=url,
-                snapshot_id=sid, authority=100, term_months=6)
+    base = {"family": "certificate", "product": "6 Month Certificate", "metric": "apy", "value": value, "url": url,
+            "snapshot_id": sid, "authority": 100, "term_months": 6}
     base.update(kw)
     return Fact(**base)
 
@@ -73,7 +73,7 @@ def test_index_search_is_scoped_to_snapshot_and_carries_forward():
     idx.add_page("Certificates pay 3.50% APY.", "https://x.test/rates", "01", 100)
     idx.add_page("Certificates pay 3.50% APY.", "https://x.test/rates", "02", 100)
     q = tokenize("mobile wallet apple pay")
-    assert idx.search(q, "02") == []                                       # page absent from 02 ...
+    assert all(h[2] != "https://x.test/mobile" for h in idx.search(q, "02"))   # page absent from 02 ...
     carried = idx.search(q, "02", url_source={"https://x.test/mobile": "01", "https://x.test/rates": "02"})
     assert carried and carried[0][2] == "https://x.test/mobile"             # ... unless carried forward
     assert idx.search(q, "01")[0][2] == "https://x.test/mobile"

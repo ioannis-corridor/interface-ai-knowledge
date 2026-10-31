@@ -1,5 +1,6 @@
 """Composer paths on a synthetic site: tier listing, superlative, verify, change, link, fee, as-of refusal."""
 import contract
+
 from ks.format import plain_text
 from ks.system import KnowledgeSystem
 from ks.text import numbers_in

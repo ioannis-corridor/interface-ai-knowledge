@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pytest ruff
+      - name: Lint
+        run: ruff check submission tests
+      - name: Unit tests
+        run: python -m pytest
+      - name: Harness self-test (synthetic site, conflicts gold)
+        env:
+          KS_DISABLE_LLM: "1"
+        run: |
+          python harness/run_eval.py --submission submission --snapshots harness/selftest/snapshots \
+            --eval harness/selftest/eval.jsonl --conflicts-gold harness/selftest/conflicts_gold.json --out /tmp/selftest
+          python - <<'EOF'
+          import json
+          r = json.load(open("/tmp/selftest/report.json"))
+          assert r["final_score"] >= 0.99, r
+          print("self-test final_score", r["final_score"])
+          EOF

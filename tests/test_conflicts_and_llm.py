@@ -65,6 +65,7 @@ def test_merge_llm_fills_gaps_but_never_overrides_rules():
     q = merge_llm(q, {"intent": "change", "family": "savings", "term_months": 12})
     assert (q.intent, q.family, q.term_months) == before                   # rules recognised it: LLM ignored
 
-    q = parse_rules("Where can members of the closing branch go?")
+    q = parse_rules("Where can members of the shuttered Riverside location go?")
+    assert needs_llm(q)
     q = merge_llm(q, {"intent": "status", "entity": "address", "branch": "Riverside"})
     assert q.intent != "status" and q.entity is None                       # unsafe intent/entity not accepted
