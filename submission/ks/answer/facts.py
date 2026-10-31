@@ -17,6 +17,7 @@ from .draft import NOT_YET, REFUSE_RATE, Draft
 NO_RATE_FAMILIES = {"construction", "student_loan"}
 GENERIC_LOAN_FAMILIES = {"auto", "atv", "boat_rv", "personal_loan", "home_improvement", "home_equity_loan"}
 RATE_METRICS = ("apy", "dividend_rate", "apr", "rate")
+MIN_METRICS = ("min_open", "min_earn")
 MAX_TIERS_LISTED = 14
 Tiers = Dict[tuple, List[Fact]]
 
@@ -41,8 +42,11 @@ class FactAnswers(AnswerBase):
         fam = q.family
         pool = self.facts(sid, fam)
         available = {f.metric for f in pool}
-        metric = q.metric if q.metric in RATE_METRICS else None
-        if metric not in available:
+        metric = q.metric if q.metric in RATE_METRICS + MIN_METRICS else None
+        if metric in MIN_METRICS and metric not in available:
+            other = "min_earn" if metric == "min_open" else "min_open"    # certificates list only a minimum to earn
+            metric = other if other in available else None
+        elif metric not in available:
             prim = PRIMARY_METRIC.get(fam, "apr")
             metric = prim if prim in available else next((m for m in ("apy", "apr", "rate") if m in available), None)
         if metric is None:
@@ -144,7 +148,9 @@ class FactAnswers(AnswerBase):
         loan_desc = " ".join(x for x in [term_text(win.term_months), FAMILY_NAMES.get(win.family, win.family)] if x) \
             if generic or win.family in GENERIC_LOAN_FAMILIES else desc
         for_tier = f" for {tier}" if tier else ""
-        if win.family in ("auto", "atv", "boat_rv"):
+        if metric in MIN_METRICS:
+            text = f"The {metric_word(metric)} the {desc} is {win.value}{for_tier}."
+        elif win.family in ("auto", "atv", "boat_rv"):
             text = f"The {loan_desc} APR{for_tier} is {win.value}."
         elif win.family == "credit_card":
             kind = "introductory balance-transfer" if win.intro else "standard"
@@ -186,6 +192,9 @@ class FactAnswers(AnswerBase):
                                               (it[0].amount[1] if it[0].amount else 0),
                                               -(it[0].model_years[1] if it[0].model_years else 0)))[:MAX_TIERS_LISTED]
         fam = items[0][0].family
+        facts = [f for _, agree in items for f in agree]
+        if metric in MIN_METRICS:
+            return self._minimums(items, fam, metric, facts)
         parts = []
         for win, _ in items:
             label = product_name(win)
@@ -202,8 +211,28 @@ class FactAnswers(AnswerBase):
             parts.append(f"{bits}: {value}" if bits else value)
         unit = "" if (fam == "mortgage" and metric == "rate") else metric_word(metric)
         text = f"Current {FAMILY_NAMES.get(fam, fam)} {unit} by tier: " + "; ".join(parts) + "."
-        facts = [f for _, agree in items for f in agree]
         return Draft(tidy(text), facts, self.sources(facts))
+
+    def _minimums(self, items, fam: str, metric: str, facts: List[Fact]) -> Draft:
+        """Minimums are usually the same across tiers: say the value once, grouped by the products it applies to."""
+        by_value: Dict[str, List[str]] = defaultdict(list)
+        tiered = {w.product for w, _ in items if w.balance or w.amount}
+        for win, _ in items:
+            label = product_name(win) if fam not in GENERIC_LOAN_FAMILIES else tier_phrase(win)
+            if win.product in tiered and (win.balance or win.amount) and len(items) > 1:
+                label = f"{label} ({tier_phrase(win)})"
+            if label not in by_value[win.value]:
+                by_value[win.value].append(label)
+        head = f"The {metric_word(metric)} {FAMILY_NAMES.get(fam, fam)}s"
+        if len(by_value) == 1:
+            value, labels = next(iter(by_value.items()))
+            subject = labels[0].split(" (")[0] if len(labels) == 1 or len(tiered) == 1 else FAMILY_NAMES.get(fam, fam) + "s"
+            return Draft(tidy(f"The {metric_word(metric)} {subject} is {value}."), facts, self.sources(facts))
+        parts = []
+        for value, labels in by_value.items():
+            shown = ", ".join(labels[:5]) + (f" and {len(labels) - 5} more" if len(labels) > 5 else "")
+            parts.append(f"{value} for {shown}")
+        return Draft(tidy(head + ": " + "; ".join(parts) + "."), facts, self.sources(facts))
 
     # ------------------------------------------------------------------ lists
     def answer_list(self, q, sid: str) -> Draft:
