@@ -45,7 +45,9 @@ def _clean_branch(name: str) -> Optional[str]:
     return " ".join(out)
 
 
-LOCATED_RE = re.compile(r"The\s+([A-Z][\w'.-]+(?:\s+(?:Avenue|Street|Ave\.?|St\.?|Road|Rd\.?))?)\s+(?:[A-Z][\w'.&-]+\s+){0,3}branch\s+is\s+located\s+at\s+(\d{2,5}\s+[A-Z][^.,\n]{3,60})")
+LOCATED_RE = re.compile(
+    r"The\s+([A-Z][\w'.-]+(?:\s+(?:Avenue|Street|Ave\.?|St\.?|Road|Rd\.?))?)\s+(?:[A-Z][\w'.&-]+\s+){0,3}branch\s+is\s+located\s+at\s+"
+    r"(\d{2,5}\s+[A-Z][\w.' -]{3,60}?)(?=\.\s|\.$|,|\s+(?:in|and|near|on)\b)")
 
 
 def _branch_name(title: str, text: str) -> Optional[str]:
