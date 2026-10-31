@@ -99,6 +99,7 @@ class Query:
     tokens: List[str] = field(default_factory=list)
     confidence: float = 1.0
     family_weak: bool = False      # family came from a generic word such as "card"
+    from_llm: bool = False         # routing came from the LLM parser; a failed lookup falls back to free text
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -144,6 +145,16 @@ def _parse_money(text: str) -> Optional[float]:
             v *= 1000
         vals.append(v)
     if not vals:
+        t = text.lower()
+        for w, n in NUMBER_WORDS.items():
+            t = re.sub(rf"\b{w}\b", str(n), t)
+        m = re.search(r"\b(\d+(?:\.\d+)?)\s*(grand|thousand|k)\b", t)
+        if m:
+            vals.append(float(m.group(1)) * 1000)
+        m = re.search(r"\b(\d+(?:\.\d+)?)\s*(million|mm)\b", t)
+        if m:
+            vals.append(float(m.group(1)) * 1_000_000)
+    if not vals:
         m = re.search(r"\b(\d{1,3}(?:,\d{3})+)\b", text)
         if m:
             vals.append(float(m.group(1).replace(",", "")))
@@ -184,6 +195,8 @@ def parse_rules(question: str) -> Query:
     q.as_of_text = _parse_as_of(text)
 
     q.entity = _detect(ENTITY_PATTERNS, low)
+    if q.entity == "closure" and not re.search(r"\b(branch|location|office|lobby|store|atm)\b", low):
+        q.entity = None                      # closing an account, not a branch
     if q.entity == "closure" and re.search(r"what time|\bhours\b|o'clock|tonight|each day|daily", low) and \
             not re.search(r"still open|shut|closure|permanently|for good", low):
         q.entity = "hours_lobby"
@@ -306,27 +319,46 @@ def parse_rules(question: str) -> Query:
     return q
 
 
+def needs_llm(q: Query) -> bool:
+    """Only questions the rules could not place are worth an LLM call."""
+    return (q.family is None or q.family_weak) and q.entity is None and q.intent in ("free", "fact")
+
+
 def merge_llm(rules: Query, llm: Optional[dict]) -> Query:
-    """The LLM fills gaps; explicit numbers and products found by the rules always win."""
-    if not llm:
+    """Strict gap filling: the LLM may name a family, product or entity the rules missed. It never overrides a
+    rule decision and never switches to the time-sensitive intents (change, status, verify, aggregate)."""
+    if not llm or not needs_llm(rules):
         return rules
     q = rules
     fam = llm.get("family")
-    if fam and (q.family is None or q.confidence < 1.0):
-        q.family = fam
-    for key in ("product", "metric", "entity", "branch", "ira_type", "purpose"):
+    if fam and fam in FAMILIES and (q.family is None or q.family_weak):
+        q.family, q.family_weak, q.from_llm = fam, False, True
+    for key in ("product", "metric", "ira_type", "purpose"):
         if getattr(q, key) is None and llm.get(key):
             setattr(q, key, llm[key])
+    if q.entity is None and llm.get("entity") in SAFE_LLM_ENTITIES:
+        q.entity, q.from_llm = llm["entity"], True
+        if q.branch is None and llm.get("branch"):
+            q.branch = llm["branch"]
     for key in ("term_months", "model_year", "balance", "amount"):
-        if getattr(q, key) is None and isinstance(llm.get(key), (int, float)):
+        if getattr(q, key) is None and isinstance(llm.get(key), (int, float)) and not isinstance(llm.get(key), bool):
             setattr(q, key, llm[key])
     for key in ("jumbo", "special", "intro", "business"):
         if getattr(q, key) is None and isinstance(llm.get(key), bool):
             setattr(q, key, llm[key])
     intent = llm.get("intent")
-    if intent in ("fact", "list", "link", "change", "status", "aggregate", "verify", "superlative", "free"):
-        if q.intent == "free" or (q.intent == "fact" and intent in ("list", "link", "change", "status", "aggregate", "verify")):
+    if q.intent == "free" and intent in ("fact", "list", "link", "superlative", "fee"):
+        if intent == "fee":
+            q.family, q.metric, q.intent = "fee", "fee", "fee"
+        elif q.family or intent == "link":
             q.intent = intent
     if q.intent == "fact" and not q.family and not q.entity:
         q.intent = "free"
     return q
+
+
+FAMILIES = {"certificate", "ira", "savings", "money_market", "hsa", "checking", "auto", "mortgage", "heloc",
+            "home_equity_loan", "home_improvement", "personal_loan", "credit_card", "boat_rv", "atv", "student_loan",
+            "construction", "fee"}
+SAFE_LLM_ENTITIES = {"routing", "phone", "branch_count", "member_count", "assets", "forbes", "hours_lobby",
+                     "hours_driveup", "closure"}

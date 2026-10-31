@@ -538,12 +538,16 @@ class Composer:
 
     # ------------------------------------------------------------------ fees
     FEE_NOISE = {"fee", "cost", "charge", "price", "much", "pay", "account", "service", "member", "non-member",
-                 "per", "item", "each", "month", "what", "there", "any", "dupaco"}
+                 "per", "item", "each", "month", "what", "there", "any", "dupaco", "money", "penalty", "send", "sending",
+                 "get", "do", "you", "use", "using"}
     FEE_SYNONYMS = {"lost": {"lost", "replacement", "replace", "reissue"}, "replacement": {"replacement", "replace", "reissue", "lost"},
                     "wire": {"wire"}, "incoming": {"incoming", "inbound"}, "outgoing": {"outgoing", "domestic", "outbound"},
                     "overdraft": {"overdraft", "nsf", "insufficient"}, "bounced": {"overdraft", "nsf", "returned"},
                     "cashier": {"official", "cashier", "certified"}, "check": {"check", "draft"}, "atm": {"atm"},
                     "foreign": {"foreign", "international"}, "international": {"international", "foreign"},
+                    "overseas": {"international", "foreign"}, "abroad": {"international", "foreign"},
+                    "cashier's": {"official", "cashier", "certified"}, "official": {"official"},
+                    "counterfeit": {"counterfeit"}, "return": {"returned", "return"}, "returned": {"returned", "return"},
                     "stop": {"stop"}, "payment": {"payment"}, "money": {"money"}, "order": {"order"},
                     "notary": {"notary"}, "box": {"box"}, "safe": {"safe"}, "deposit": {"deposit"},
                     "statement": {"statement"}, "copy": {"copy"}, "research": {"research"}, "debit": {"debit"},
@@ -567,11 +571,11 @@ class Composer:
             ltoks = set(tokenize(f.product))
             covered = 0
             for k in keys:
-                alts = self.FEE_SYNONYMS.get(k, {k})
+                alts = self.FEE_SYNONYMS.get(k) or self.FEE_SYNONYMS.get(k + "s") or {k}
                 if alts & ltoks:
                     covered += 1
             if covered == len(keys):
-                extra = len(ltoks - {t for k in keys for t in self.FEE_SYNONYMS.get(k, {k})})
+                extra = len(ltoks - {t for k in keys for t in (self.FEE_SYNONYMS.get(k) or self.FEE_SYNONYMS.get(k + "s") or {k})})
                 scored.append((-extra, f.authority, f))
         if not scored:
             return Draft(REFUSE_FEE.format(thing=thing, org=self.org), confident=False)
@@ -745,6 +749,9 @@ class Composer:
                     definitional or wants_number or (len(sents[i]) < 160 and set(tokenize(sents[i + 1])) & qset)):
                 picked.append(sents[i + 1])
             text = self._scrub_stale_rates(" ".join(picked), sid)
+            if text.strip() and q.family is None and re.search(r"\b(rate|apr|apy|interest)\b", q.raw, re.I) \
+                    and re.search(r"\d+(?:\.\d+)?\s?%", text):
+                return Draft(REFUSE_RATE.format(thing="that", org=self.org), confident=False)
             if text.strip():
                 return Draft(_tidy(text[:600]), urls=[(url, sents[i][:200])])
         score, chunk, url = hits[0]
@@ -764,6 +771,14 @@ class Composer:
 
     # ------------------------------------------------------------------ dispatch
     def compose(self, q, sid: str, exact: bool, ref_date: date) -> Draft:
+        d = self._compose(q, sid, exact, ref_date)
+        if getattr(q, "from_llm", False) and not d.confident and q.intent != "fee":
+            # The LLM's routing found nothing; the deterministic free-text path is the safer fallback.
+            free = self.answer_free(q, sid)
+            return free if free.confident else d
+        return d
+
+    def _compose(self, q, sid: str, exact: bool, ref_date: date) -> Draft:
         if q.entity and q.intent in ("fact", "status", "aggregate", "free"):
             d = self.answer_entity(q, sid, ref_date)
             if d:

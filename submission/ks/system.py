@@ -11,7 +11,7 @@ from .conflicts import find_conflicts
 from .entities import extract_entities, extract_prose_facts
 from .index import ChunkIndex
 from .pages import BoilerplateFilter, article_date, classify
-from .query import merge_llm, parse_rules
+from .query import merge_llm, needs_llm, parse_rules
 from .store import FactStore
 from .tables import parse_tables, rename_generic_products, table_to_facts
 from .text import numbers_in, parse_iso, strip_markdown
@@ -100,7 +100,7 @@ class KnowledgeSystem:
 
     def _answer(self, question: str, as_of: Optional[str]):
         q = parse_rules(question)
-        if self.llm is not None:
+        if self.llm is not None and needs_llm(q):
             try:
                 q = merge_llm(q, self.llm.parse(question))
             except Exception:
