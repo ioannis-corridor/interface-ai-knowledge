@@ -46,6 +46,7 @@ PRODUCT_PATTERNS = [
 
 ENTITY_PATTERNS = [
     ("routing", r"routing (?:number|#|no)|\baba\b"),
+    ("phone", r"\b(phone|telephone|call you|contact number|customer service number|member service number)\b"),
     ("branch_count", r"how many (?:dupaco )?(?:branch|location|office)|number of (?:branch|location)"),
     ("employee_count", r"how many (?:dupaco )?(?:employees|staff|people)(?:\s+(?:does|do|work|are|at|in)\b|\s*\?|\s*$)|number of employees|how many people work"),
     ("member_count", r"how many members|number of members|membership (?:size|count)"),
@@ -263,9 +264,10 @@ def parse_rules(question: str) -> Query:
     m = PCT_IN_Q_RE.search(text)
     if m:
         q.pct_value = float(m.group(1))
-    sup = SUPERLATIVE_RE.search(low)
-    if sup:
-        q.superlative = "min" if sup.group(1) in ("lowest", "minimum", "cheapest") else "max"
+    sup_text = re.sub(r"\b(minimum|lowest|smallest|least)\s+(balance|deposit|amount|opening|to open|to earn|required)", " ", low)
+    sups = [m.group(1) for m in SUPERLATIVE_RE.finditer(sup_text)]
+    if sups:
+        q.superlative = "min" if all(w in ("lowest", "minimum", "cheapest", "least") for w in sups) else "max"
     fee_q = bool(FEE_RE.search(low)) and not re.search(r"\b(apy|apr|dividend|interest rate|yield)\b", low)
     if fee_q and (q.family is None or q.family_weak or q.family == "credit_card" and re.search(r"debit|replace|lost|rush", low)):
         q.family, q.family_weak = "fee", False

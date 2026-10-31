@@ -44,7 +44,8 @@ class Draft:
 
 
 def _plain(s: str) -> str:
-    s = re.sub(r"[*_`#<>\[\]]+", "", s or "")
+    s = re.sub(r"[*_`\[\]]+|<[^>]{0,40}>", "", s or "")
+    s = re.sub(r"(^|\s)#+\s", r"\1", s)
     return re.sub(r"\s+", " ", s).strip()
 
 
@@ -196,6 +197,15 @@ class Composer:
             return self._eligibility(sid)
         if ent == "account_howto":
             return self._account_howto(q, sid)
+        if ent == "phone":
+            pages = self.pages.get(sid, {})
+            contact = _pick_url(pages, ["/contact"])
+            if contact:
+                text = pages[contact].get("text", "")
+                m = re.search(r"Phone:?\s*(\d{3}-\d{3}-\d{4})", text) or re.search(r"\b(8\d\d-\d{3}-\d{4})\b", text)
+                if m:
+                    return Draft(f"You can reach {self.org} at {m.group(1)}.", urls=[(contact, m.group(0))])
+            return None
         if ent == "address":
             fs = [f for f in facts if f.metric == "address"]
             if not q.branch:
@@ -409,16 +419,20 @@ class Composer:
         elif win.family == "mortgage" and metric == "rate":
             comp = self._companions(sid, win, "apr")
         extra = f" ({comp.value} {_metric_word(comp.metric)})" if comp and comp.value != win.value else ""
+        generic_name = bool(re.search(r"^\d+ months?$|^loan - |standard \(|^\d+ years?$", name, re.I)) or name.lower() == win.family
+        loan_desc = " ".join(x for x in [_term_text(win.term_months), FAMILY_NAMES.get(win.family, win.family)] if x) \
+            if generic_name or win.family in ("auto", "atv", "boat_rv", "personal_loan", "home_improvement", "home_equity_loan") else desc
         if win.family in ("auto", "atv", "boat_rv"):
-            text = f"The {term} {FAMILY_NAMES.get(win.family, win.family)} APR for {tier} is {win.value}."
+            text = f"The {loan_desc} APR for {tier} is {win.value}." if tier else f"The {loan_desc} APR is {win.value}."
         elif win.family == "credit_card":
             kind = "introductory balance-transfer" if win.intro else "standard"
             text = f"The {name} {kind} APR is {win.value}, based on creditworthiness."
-        elif tier:
-            text = f"{desc} pays {value}{extra} for {tier}." if win.family in DEPOSIT else \
-                f"The {desc} {_metric_word(metric)} is {value}{extra} for {tier}."
+        elif win.family in DEPOSIT:
+            text = f"{desc} pays {value}{extra}" + (f" for {tier}." if tier else ".")
+        elif win.family == "mortgage":
+            text = f"The {name} {_metric_word(metric)} is {win.value}{extra}" + (f" for {tier}." if tier else ".")
         else:
-            text = f"{desc} pays {value}{extra}." if win.family in DEPOSIT else f"The {desc} {_metric_word(metric)} is {value}{extra}."
+            text = f"The {loan_desc} {_metric_word(metric)} is {win.value}{extra}" + (f" for {tier}." if tier else ".")
         facts = agree + ([comp] if comp else [])
         return Draft(_tidy(text), facts, self._sources(agree), conflict_note=note)
 
@@ -444,6 +458,10 @@ class Composer:
         for key, fs in tiers.items():
             win, agree, _ = self._resolve(fs)
             items.append((win, agree))
+        # A copy of the same product/value without tier detail (older page layout) is not another tier.
+        rich = {(w.product, w.value) for w, _ in items if w.balance or w.amount or w.model_years or w.term_months}
+        items = [(w, a) for w, a in items if (w.balance or w.amount or w.model_years or w.term_months)
+                 or (w.product, w.value) not in rich]
         items.sort(key=lambda it: (it[0].business, it[0].intro, it[0].jumbo, -(it[0].special),
                                    it[0].term_months or 0, -(it[0].balance[0] if it[0].balance else 0),
                                    (it[0].amount[1] if it[0].amount else 0), -(it[0].model_years[1] if it[0].model_years else 0)))
@@ -521,7 +539,7 @@ class Composer:
     # ------------------------------------------------------------------ fees
     FEE_NOISE = {"fee", "cost", "charge", "price", "much", "pay", "account", "service", "member", "non-member",
                  "per", "item", "each", "month", "what", "there", "any", "dupaco"}
-    FEE_SYNONYMS = {"lost": {"lost", "replacement", "replace", "reissue", "rush"}, "replacement": {"replacement", "replace", "reissue", "lost", "rush"},
+    FEE_SYNONYMS = {"lost": {"lost", "replacement", "replace", "reissue"}, "replacement": {"replacement", "replace", "reissue", "lost"},
                     "wire": {"wire"}, "incoming": {"incoming", "inbound"}, "outgoing": {"outgoing", "domestic", "outbound"},
                     "overdraft": {"overdraft", "nsf", "insufficient"}, "bounced": {"overdraft", "nsf", "returned"},
                     "cashier": {"official", "cashier", "certified"}, "check": {"check", "draft"}, "atm": {"atm"},
@@ -602,9 +620,10 @@ class Composer:
         if len(tiers) > 1 and not (q.model_year is not None or q.balance is not None or q.amount is not None):
             return self._multi(q, sid, tiers, metric)
         win = best_of(cands)
-        key = win.soft_key()
+        from .conflicts import _group_key
+        key = _group_key(win)
         series = []
-        for s, taken, fs in self.store.history(lambda f: f.soft_key() == key and f.authority >= 50):
+        for s, taken, fs in self.store.history(lambda f: _group_key(f) == key and f.authority >= 50):
             if fs:
                 w = best_of(fs)
                 series.append((s, taken, w))
@@ -624,7 +643,7 @@ class Composer:
             text = f"The {label} {_metric_word(metric)} has been {win.value} in every snapshot since {_month(changes[0][0])}."
         else:
             steps = [f"{w.value} (as of {_month(t)})" for t, w in changes]
-            text = f"The {label} {_metric_word(metric)} changed: " + " -> ".join(steps) + f". The current value is {changes[-1][1].value}."
+            text = f"The {label} {_metric_word(metric)} changed from " + ", then ".join(steps[:-1]) + f" to {steps[-1]}. The current value is {changes[-1][1].value}."
         used = [w for _, _, w in series]
         return Draft(_tidy(text), used, self._sources([changes[-1][1]] + used, 3))
 
