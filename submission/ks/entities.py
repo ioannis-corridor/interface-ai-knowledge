@@ -148,3 +148,111 @@ def extract_entities(markdown: str, url: str, title: str, sid: str, authority: i
 
 def extract_dates(markdown: str) -> List[date]:
     return [d for d in (parse_long_date(m.group(0)) for m in LONG_DATE_RE.finditer(markdown)) if d]
+
+
+# ---------------------------------------------------------------------- prose facts
+KV_LINE_RE = re.compile(r"^\s*([A-Za-z][^:|\n]{3,90}?)\s*:\s*(\$\s?\d[\d,]*(?:\.\d+)?|\d+(?:\.\d+)?\s?%)\s*\.?\s*$")
+RATE_SENT_RE = re.compile(
+    r"(\d+)[- ]?(?:month|mo|year|yr)s?\s+(?:share\s+|term[- ]share\s+)?(certificate|cd|certificate special)s?\b[^.%\n]{0,40}?"
+    r"\b(apy|apr|dividend rate|rate)\b[^%\n]{0,12}?(\d+\.\d+)\s?%", re.I)
+FEE_LINE_RE = re.compile(
+    r"^\s*(?P<label>[A-Za-z(][^$|\n]{3,110}?)\s+(?P<value>\$\s?\d[\d,]*(?:\.\d{2})?|Free|No charge)\*?"
+    r"(?:\s*(?P<unit>per [A-Za-z/ ]+?|each|for non-members|of (?:the )?amount|plus tax))?\s*\.?\s*$", re.I)
+EXPIRED_RE = re.compile(r"\b(offer|promotion|special|promo)\b[^.\n]{0,40}\b(ended|expired|ends|expires|valid through|through)\b[^.\n]{0,30}(\d{4}-\d{2}-\d{2}|" + LONG_DATE_RE.pattern + r"|\d{1,2}/\d{1,2}/\d{2,4})", re.I)
+
+
+def _family_from_label(label: str) -> Optional[str]:
+    low = label.lower()
+    if re.search(r"\bfee\b|\bcharge\b|\bcost\b", low):
+        return "fee"
+    if re.search(r"certificate|\bcd\b|term[- ]share|jumbo", low):
+        return "certificate"
+    if re.search(r"\bira\b|roth|traditional", low):
+        return "ira"
+    if "money market" in low:
+        return "money_market"
+    if "checking" in low:
+        return "checking"
+    if "savings" in low:
+        return "savings"
+    if re.search(r"mortgage|home loan|fixed", low):
+        return "mortgage"
+    if re.search(r"auto|vehicle|car loan", low):
+        return "auto"
+    if "personal loan" in low:
+        return "personal_loan"
+    if re.search(r"credit card|visa", low):
+        return "credit_card"
+    return None
+
+
+def _metric_from_label(label: str, value: str, family: str) -> str:
+    low = label.lower()
+    if family == "fee" or value.startswith("$"):
+        return "fee"
+    if "apy" in low or "yield" in low:
+        return "apy"
+    if "dividend" in low:
+        return "dividend_rate"
+    if "apr" in low:
+        return "apr"
+    return "apy" if family in ("certificate", "ira", "savings", "money_market", "checking", "hsa") else "apr"
+
+
+def extract_prose_facts(markdown: str, url: str, title: str, sid: str, authority: int, page_date: Optional[date],
+                        fetched: Optional[date], snapshot_date: Optional[date]) -> List[Fact]:
+    """Facts stated in prose: 'Label: value' lines, '6-month certificate APY 2.95%' sentences, fee-schedule lines."""
+    from .tables import _term, _money_range
+    facts: List[Fact] = []
+    plain_lines = [strip_markdown(l) for l in markdown.splitlines()]
+    plain = " ".join(plain_lines)
+    auth = authority
+    m = EXPIRED_RE.search(plain)
+    if m:
+        auth = min(auth, 35)          # an expired or dated promotion never beats the live rate sheet
+    is_fee_page = bool(re.search(r"fee schedule|service charges|fees and charges", plain, re.I)) or "fee" in (url + title).lower()
+
+    for i, line in enumerate(plain_lines):
+        kv = KV_LINE_RE.match(line)
+        if kv:
+            label, value = norm_space(kv.group(1)), norm_space(kv.group(2)).replace(" %", "%").replace("$ ", "$")
+            fam = _family_from_label(label)
+            if not fam:
+                continue
+            metric = _metric_from_label(label, value, fam)
+            facts.append(Fact(family=fam, product=re.sub(r"\s*(apy|apr|rate|fee)\s*$", "", label, flags=re.I) or label,
+                              metric=metric, value=value, url=url, snapshot_id=sid, authority=auth,
+                              term_months=_term(label), jumbo="jumbo" in label.lower(), special="special" in label.lower(),
+                              article_date=page_date, fetched_at=fetched, quote=line[:200], label=label))
+            continue
+        if is_fee_page:
+            fee = FEE_LINE_RE.match(line)
+            if fee and not re.search(r"effective|schedule|following|subject to|please|charged|we will", line, re.I):
+                label = norm_space(fee.group("label")).strip(" -–:")
+                if i > 0 and plain_lines[i - 1] and not FEE_LINE_RE.match(plain_lines[i - 1]) and \
+                        (label[0] == "(" or label[0].islower()) and len(plain_lines[i - 1]) < 90:
+                    label = norm_space(plain_lines[i - 1] + " " + label)
+                value = norm_space(fee.group("value")).replace("$ ", "$")
+                unit = norm_space(fee.group("unit") or "")
+                if len(label) < 4 or re.search(r"^\d|^\$", label):
+                    continue
+                facts.append(Fact(family="fee", product=label, metric="fee", value=value + (f" {unit}" if unit else ""),
+                                  url=url, snapshot_id=sid, authority=auth, article_date=page_date, fetched_at=fetched,
+                                  quote=line[:200], label=label, business="business" in label.lower()))
+
+    for m in RATE_SENT_RE.finditer(plain):
+        term = int(m.group(1))
+        if re.search(r"year|yr", m.group(0)[:12], re.I):
+            term *= 12
+        metric = {"apy": "apy", "apr": "apr", "dividend rate": "dividend_rate", "rate": "apy"}[m.group(3).lower()]
+        sent_auth = auth
+        window = plain[max(0, m.start() - 80): m.end() + 120]
+        if EXPIRED_RE.search(window) or re.search(r"\b(ended|expired|was|were|previous|old)\b", window, re.I):
+            sent_auth = min(sent_auth, 30)
+        special = "special" in window.lower()
+        facts.append(Fact(family="certificate", product=f"{term} Month Certificate" + (" Special" if special else ""),
+                          metric=metric, value=f"{m.group(4)}%", url=url, snapshot_id=sid, authority=sent_auth,
+                          term_months=term, special=special, jumbo="jumbo" in window.lower(),
+                          article_date=page_date, fetched_at=fetched, quote=norm_space(m.group(0))[:200],
+                          label=norm_space(m.group(0))))
+    return facts

@@ -104,8 +104,11 @@ class ChunkIndex:
             self._dirty = False
 
     def search(self, query_tokens: List[str], snapshot_id: str, k: int = 12, k1: float = 1.4, b: float = 0.6,
-               url_filter: Optional[callable] = None) -> List[Tuple[float, Chunk, str]]:
-        """-> [(score, chunk, best_url)] restricted to chunks present in `snapshot_id`."""
+               url_filter: Optional[callable] = None, url_source: Optional[Dict[str, str]] = None
+               ) -> List[Tuple[float, Chunk, str]]:
+        """-> [(score, chunk, best_url)] restricted to chunks current in `snapshot_id`.
+
+        `url_source` (url -> snapshot id) lets pages missing from this snapshot be served from an earlier crawl."""
         self._finalize()
         n = len(self.chunks)
         scores: Dict[int, float] = defaultdict(float)
@@ -120,7 +123,10 @@ class ChunkIndex:
         out = []
         for idx, sc in scores.items():
             ch = self.chunks[idx]
-            urls = [u for (sid, u) in ch.occurrences if sid == snapshot_id]
+            if url_source:
+                urls = [u for (sid, u) in ch.occurrences if url_source.get(u) == sid]
+            else:
+                urls = [u for (sid, u) in ch.occurrences if sid == snapshot_id]
             if url_filter:
                 urls = [u for u in urls if url_filter(u)]
             if not urls:

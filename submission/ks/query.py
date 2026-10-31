@@ -67,6 +67,7 @@ LIST_RE = re.compile(r"\b(what|which)\b.*\b(do you (?:offer|have)|are (?:there|a
 SUPERLATIVE_RE = re.compile(r"\b(highest|best|top|maximum|max|most|lowest|minimum|cheapest)\b", re.I)
 VERIFY_RE = re.compile(r"^\s*(do|does|is|are|can|did|will|has|have)\b", re.I)
 REPEAT_RE = re.compile(r"\b(repeat|again|one more time|once more)\b", re.I)
+FEE_RE = re.compile(r"\b(fees?|charges?|cost|costs|surcharge|penalt(?:y|ies))\b|how much (?:is|are|does|do you charge|for|to|will)", re.I)
 AS_OF_RE = re.compile(r"\b(?:as of|back in|in|during|on)\s+(?:(\d{1,2})\s+)?(january|february|march|april|may|june|july|august|september|october|november|december)(?:\s+(\d{1,2}))?,?\s+(20\d\d)\b", re.I)
 PCT_IN_Q_RE = re.compile(r"(\d+(?:\.\d+)?)\s*%")
 MONEY_IN_Q_RE = re.compile(r"\$\s?(\d[\d,]*(?:\.\d+)?)(k)?\b", re.I)
@@ -265,9 +266,15 @@ def parse_rules(question: str) -> Query:
     sup = SUPERLATIVE_RE.search(low)
     if sup:
         q.superlative = "min" if sup.group(1) in ("lowest", "minimum", "cheapest") else "max"
+    fee_q = bool(FEE_RE.search(low)) and not re.search(r"\b(apy|apr|dividend|interest rate|yield)\b", low)
+    if fee_q and (q.family is None or q.family_weak or q.family == "credit_card" and re.search(r"debit|replace|lost|rush", low)):
+        q.family, q.family_weak = "fee", False
+        q.metric = "fee"
 
     # ---- intent
-    if LINK_RE.search(text) or ACTION_RE.search(text):
+    if q.family == "fee" and not q.entity:
+        q.intent = "fee"
+    elif LINK_RE.search(text) or ACTION_RE.search(text):
         q.intent = "link"
     elif q.entity == "closure" or (q.entity == "hours_lobby" and q.branch and re.search(r"still open|open today", low)):
         q.intent = "status"

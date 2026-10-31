@@ -8,7 +8,7 @@ from typing import Dict, Optional
 
 from .answer import Composer, Draft, _plain
 from .conflicts import find_conflicts
-from .entities import extract_entities
+from .entities import extract_entities, extract_prose_facts
 from .index import ChunkIndex
 from .pages import BoilerplateFilter, article_date, classify
 from .query import merge_llm, parse_rules
@@ -17,6 +17,20 @@ from .tables import parse_tables, rename_generic_products, table_to_facts
 from .text import numbers_in, parse_iso, strip_markdown
 
 URL_IN_TEXT = re.compile(r"https?://[^\s)\]>\"']+")
+
+
+def _org_name(pages) -> Optional[str]:
+    """The institution's name, from the most common '| Name' suffix in page titles."""
+    from collections import Counter
+    c: Counter = Counter()
+    for p in pages:
+        m = re.search(r"\|\s*([A-Z][\w&' .-]{1,40})\s*$", p.title or "")
+        if m:
+            c[m.group(1).strip()] += 1
+    if not c:
+        return None
+    name, n = c.most_common(1)[0]
+    return name if n >= 10 else None
 
 
 class KnowledgeSystem:
@@ -49,12 +63,15 @@ class KnowledgeSystem:
         for p in snapshot.pages:
             cls = classify(p.url, p.title)
             md = p.markdown or ""
+            self.store.add_page(sid, p.url)
             pdate = article_date(md) if cls in (60, 50) else None
             fetched = parse_iso(p.fetched_at)
-            for t in parse_tables(md):
+            tables = parse_tables(md)
+            for t in tables:
                 table_facts += table_to_facts(t, p.url, sid, cls, pdate, fetched)
             for f in extract_entities(md, p.url, p.title or "", sid, cls, pdate, fetched):
                 self.store.add(f)
+            table_facts += extract_prose_facts(md, p.url, p.title or "", sid, cls, pdate, fetched, taken)
             cleaned = boiler.clean(md)
             self.index.add_page(cleaned, p.url, sid, cls)
             pages[p.url] = {"title": p.title or "", "class": cls, "links": URL_IN_TEXT.findall(md)[:400],
@@ -62,7 +79,13 @@ class KnowledgeSystem:
         rename_generic_products(table_facts)
         for f in table_facts:
             self.store.add(f)
+        # Pages missing from this crawl stay known from the last crawl that had them.
+        for prev_sid in [s for s, _ in self.store.snapshots if s != sid]:
+            for url, meta in self.pages.get(prev_sid, {}).items():
+                if url not in pages and self.store.url_source(sid).get(url) == prev_sid:
+                    pages[url] = {**meta, "class": max(0, meta["class"] - 10), "carried_from": prev_sid}
         self.pages[sid] = pages
+        self.composer.org = _org_name(snapshot.pages) or self.composer.org
         self._cache.clear()
         self._conflicts = None
 
