@@ -36,7 +36,7 @@ every question.
 ```bash
 pip install pytest ruff
 ruff check submission tests        # lint, config in pyproject.toml
-python -m pytest                   # 53 unit and end-to-end tests on synthetic fixtures (89% line coverage)
+python -m pytest                   # 62 unit and end-to-end tests on synthetic fixtures (90% line coverage)
 python harness/run_eval.py --submission submission --snapshots harness/selftest/snapshots \
     --eval harness/selftest/eval.jsonl --conflicts-gold harness/selftest/conflicts_gold.json
 ```
