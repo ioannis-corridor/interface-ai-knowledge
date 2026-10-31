@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 from datetime import date
-from typing import List, Optional
+from typing import FrozenSet, List, Optional
 
 from .model import Fact
 from .text import LONG_DATE_RE, norm_space, parse_long_date, strip_markdown
@@ -13,7 +13,7 @@ DAY_RE = r"(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*\.?"
 HOURS_LINE_RE = re.compile(
     rf"^\W*((?:{DAY_RE})(?:\s*[-–—]\s*(?:{DAY_RE}))?)\s*:?\s*(.+?)\W*$", re.I)
 ADDRESS_RE = re.compile(r"^\s*(\d{2,5}\s+[A-Z0-9][^,|\n]{3,60}),\s*([A-Z][A-Za-z. ]{2,30}),\s*([A-Z]{2}),?\s*(\d{5})\s*$", re.M)
-BRANCH_WORD_RE = re.compile(r"\b([A-Z][\w'.-]+(?:\s+[A-Z][\w'.-]+){0,2}?)\s+(?:Dupaco\s+)?branch\b")
+BRANCH_WORD_RE = re.compile(r"\b([A-Z][\w'.-]+(?:\s+[A-Z][\w'.-]+){0,2}?)\s+branch\b")
 
 
 def _mk(family, product, metric, value, url, sid, authority, quote, label, page_date, fetched, **extra) -> Fact:
@@ -29,12 +29,12 @@ def _norm_hours(s: str) -> str:
     return norm_space(s)
 
 
-STOP_BRANCH_WORDS = {"dupaco", "the", "a", "new", "newest", "its", "this", "our", "shared", "that", "each", "any",
-                     "every", "another", "nearest", "local", "full-service", "credit", "union", "learning", "lab"}
+STOP_BRANCH_WORDS = {"the", "a", "new", "newest", "its", "this", "our", "shared", "that", "each", "any", "every",
+                     "another", "nearest", "local", "full-service", "credit", "union", "learning", "lab", "cu"}
 
 
-def _clean_branch(name: str) -> Optional[str]:
-    words = [w for w in re.split(r"\s+", name.strip()) if w.lower() not in ("branch", "branches")]
+def _clean_branch(name: str, org_tokens: FrozenSet[str] = frozenset()) -> Optional[str]:
+    words = [w for w in re.split(r"\s+", name.strip()) if w.lower() not in ("branch", "branches") and w.lower() not in org_tokens]
     if not words or words[0].lower() in STOP_BRANCH_WORDS:
         return None
     out = []
@@ -50,25 +50,19 @@ LOCATED_RE = re.compile(
     r"(\d{2,5}\s+[A-Z][\w.' -]{3,60}?)(?=\.\s|\.$|,|\s+(?:in|and|near|on)\b)")
 
 
-def _branch_name(title: str, text: str) -> Optional[str]:
-    m = LOCATED_RE.search(text)
-    if m and _clean_branch(m.group(1)):
-        return _clean_branch(m.group(1))
-    m = re.search(r"The\s+([A-Z][\w'.-]+)\s+(?:[A-Z][\w'.&-]+\s+){0,3}branch\b", text)
-    if m and _clean_branch(m.group(1)):
-        return _clean_branch(m.group(1))
-    m = re.search(r"(?:branch|learning lab)\s+(?:in|at)\s+([A-Z][\w'.-]+(?:\s+[A-Z][\w'.-]+)?)", text)
-    if m and _clean_branch(m.group(1)):
-        return _clean_branch(m.group(1))
-    for blob in (title or "", text[:4000]):
-        m = BRANCH_WORD_RE.search(blob)
-        if m and _clean_branch(m.group(1)):
-            return _clean_branch(m.group(1))
+def _branch_name(title: str, text: str, org_tokens: FrozenSet[str] = frozenset()) -> Optional[str]:
+    candidates = [LOCATED_RE.search(text),
+                  re.search(r"The\s+([A-Z][\w'.-]+)\s+(?:[A-Z][\w'.&-]+\s+){0,3}branch\b", text),
+                  re.search(r"(?:branch|learning lab)\s+(?:in|at)\s+([A-Z][\w'.-]+(?:\s+[A-Z][\w'.-]+)?)", text),
+                  BRANCH_WORD_RE.search(title or ""), BRANCH_WORD_RE.search(text[:4000])]
+    for m in candidates:
+        if m and _clean_branch(m.group(1), org_tokens):
+            return _clean_branch(m.group(1), org_tokens)
     return None
 
 
 def extract_entities(markdown: str, url: str, title: str, sid: str, authority: int, page_date: Optional[date],
-                     fetched: Optional[date]) -> List[Fact]:
+                     fetched: Optional[date], org_tokens: FrozenSet[str] = frozenset()) -> List[Fact]:
     facts: List[Fact] = []
     text = markdown
     plain = strip_markdown(markdown)
@@ -101,7 +95,7 @@ def extract_entities(markdown: str, url: str, title: str, sid: str, authority: i
                 continue
             when = parse_long_date(m.group(1))
             if when and when != page_date:
-                branch = _branch_name(title, plain)
+                branch = _branch_name(title, plain, org_tokens)
                 if branch:
                     facts.append(_mk("entity", f"{branch} branch", "close_date", m.group(1), url, sid, authority,
                                      sent, f"{branch} branch closing date", page_date, fetched, branch=branch))
@@ -130,7 +124,7 @@ def extract_entities(markdown: str, url: str, title: str, sid: str, authority: i
                 break
         if not parts:
             continue
-        branch = branch or _branch_name(title, plain) or title.split("|")[0].strip()
+        branch = branch or _branch_name(title, plain, org_tokens) or title.split("|")[0].strip()
         schedule = "; ".join(_norm_hours(p) for p in parts)
         facts.append(_mk("entity", f"{branch} branch", f"hours_{kind.replace('-', '')}", schedule, url, sid, authority,
                          " ".join(parts), f"{branch} branch {kind} hours", page_date, fetched, branch=branch))
@@ -142,14 +136,14 @@ def extract_entities(markdown: str, url: str, title: str, sid: str, authority: i
         if m:
             street, city, state, zipc = (norm_space(g) for g in m.groups())
             context = " ".join(strip_markdown(line) for line in lines[max(0, i - 4):i]).lower()
-            is_branch = "dupaco branch" in context or "dupaco credit union" in context
+            is_branch = "branch" in context or "credit union" in context or any(t in context for t in org_tokens)
             auth = 100 if (locator and is_branch) else (authority if is_branch or locator else authority - 40)
             facts.append(_mk("entity", f"{city} branch", "address", f"{street}, {city}, {state} {zipc}", url, sid,
                              auth, m.group(0), f"{city} branch address {street}", page_date, fetched,
                              city=city, street=street))
     m = LOCATED_RE.search(plain)
-    if m and _clean_branch(m.group(1)):
-        b = _clean_branch(m.group(1))
+    if m and _clean_branch(m.group(1), org_tokens):
+        b = _clean_branch(m.group(1), org_tokens)
         facts.append(_mk("entity", f"{b} branch", "address", m.group(2), url, sid, authority, m.group(0),
                          f"{b} branch address", page_date, fetched, city=b, street=m.group(2)))
     return facts

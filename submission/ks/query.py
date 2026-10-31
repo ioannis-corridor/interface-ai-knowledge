@@ -47,8 +47,8 @@ PRODUCT_PATTERNS = [
 ENTITY_PATTERNS = [
     ("routing", r"routing (?:number|#|no)|\baba\b"),
     ("phone", r"\b(phone|telephone|call you|contact number|customer service number|member service number)\b"),
-    ("branch_count", r"how many (?:dupaco )?(?:branch|location|office)|number of (?:branch|location)"),
-    ("employee_count", r"how many (?:dupaco )?(?:employees|staff|people)(?:\s+(?:does|do|work|are|at|in)\b|\s*\?|\s*$)|number of employees|how many people work"),
+    ("branch_count", r"how many (?:\w+ ){0,2}(?:branch|location|office)|number of (?:branch|location)"),
+    ("employee_count", r"how many (?:\w+ ){0,2}(?:employees|staff|people)(?:\s+(?:does|do|work|are|at|in)\b|\s*\?|\s*$)|number of employees|how many people work"),
     ("member_count", r"how many members|number of members|membership (?:size|count)"),
     ("assets", r"total assets|assets (?:under|of)|how (?:big|large) is"),
     ("forbes", r"\bforbes\b"),
@@ -63,7 +63,7 @@ ENTITY_PATTERNS = [
 LINK_RE = re.compile(r"\b(link|url|web ?page|web ?site|what page|which page|where (?:can|do|should) i (?:go|find|see|view|look)|point me|navigate)\b", re.I)
 ACTION_RE = re.compile(r"\b(join|become a member|sign up|enroll|apply|open an? account)\b.*\bonline\b|\bonline\b.*\b(join|sign up|apply|open)\b", re.I)
 CHANGE_RE = re.compile(r"\b(chang(?:e|ed|es|ing)|before|previous(?:ly)?|used to|went (?:up|down)|increas|decreas|\brose\b|\brisen\b|\bfell\b|\bdrop|history|over time|compared|differ(?:ent|ence) (?:from|than|between)|since (?:may|june|july|august|april|march|last))\b", re.I)
-AGGREGATE_RE = re.compile(r"\b(all|every|each)\s+(?:dupaco\s+)?branch|same (?:lobby |drive[- ]up )?hours|hours (?:vary|differ)|(?:vary|differ) by branch", re.I)
+AGGREGATE_RE = re.compile(r"\b(all|every|each)\s+(?:\w+\s+)?branch|same (?:lobby |drive[- ]up )?hours|hours (?:vary|differ)|(?:vary|differ) by branch", re.I)
 LIST_RE = re.compile(r"\b(what|which)\b.*\b(do you (?:offer|have)|are (?:there|available|offered)|options|types|kinds)\b|\b(all|list|every)\b.*\b(rate|certificate|card|term|account|loan)s?\b|\brates? for (?:the|your|all) (?:certificate|cd|credit card|card|checking|savings)s?\b|\b(?:certificate|cd|credit card|card|checking|savings) (?:account )?rates?\b", re.I)
 DESCRIBE_RE = re.compile(r"^\s*(tell me about|what is|what's|whats|describe|explain|what are the (?:benefits|features)|how does .* work)\b", re.I)
 SUPERLATIVE_RE = re.compile(r"\b(highest|best|top|maximum|max|most|lowest|minimum|cheapest)\b", re.I)
@@ -181,10 +181,16 @@ def _parse_as_of(text: str) -> Optional[date]:
     return date.fromordinal(nxt.toordinal() - 1)
 
 
-def _branch(text: str) -> Optional[str]:
-    m = re.search(r"\b(?:the\s+)?([A-Z][\w'.-]+(?:\s+(?:[A-Z][\w'.-]+|Avenue|Street|Ave\.?|St\.?|Road|Rd\.?|Drive|Dr\.?|Lane|Ln\.?|Blvd\.?))*)\s+(?:[Dd]upaco\s+)?[Bb]ranch(?:es)?\b", text)
-    if m and m.group(1).lower() not in ("the", "a", "which", "what", "dupaco", "any", "each", "every", "all", "your", "nearest", "closest", "our", "my"):
-        return re.sub(r"\s+Branch$", "", m.group(1))
+NOT_A_BRANCH = {"the", "a", "which", "what", "any", "each", "every", "all", "your", "nearest", "closest", "our", "my"}
+
+
+def _branch(text: str, drop_tokens: FrozenSet[str] = frozenset()) -> Optional[str]:
+    """'the Riverside Example CU branch' -> 'Riverside' (the institution's own name is dropped)."""
+    m = re.search(r"\b(?:the\s+)?([A-Z][\w'.-]+(?:\s+(?:[A-Z][\w'.-]+|Avenue|Street|Ave\.?|St\.?|Road|Rd\.?|Drive|Dr\.?|Lane|Ln\.?|Blvd\.?))*)\s+[Bb]ranch(?:es)?\b", text)
+    if m:
+        words = [w for w in m.group(1).split() if w.lower() not in drop_tokens and w.lower() not in ("branch", "cu")]
+        if words and words[0].lower() not in NOT_A_BRANCH:
+            return " ".join(words)
     m = re.search(r"\b[Bb]ranch\s+(?:in|at|on)\s+([A-Z][\w'.-]+(?:\s+[A-Z][\w'.-]+)?)", text)
     if m:
         return m.group(1)
@@ -198,7 +204,7 @@ def parse_rules(question: str, drop_tokens: FrozenSet[str] = frozenset()) -> Que
     low = " " + re.sub(r"\s+", " ", text.lower()) + " "
     q.tokens = [t for t in tokenize(REPEAT_RE.sub(" ", text)) if t not in drop_tokens]
     q.as_of_text = _parse_as_of(text)
-    _detect_entity(q, text, low)
+    _detect_entity(q, text, low, drop_tokens)
     _detect_family_and_product(q, low)
     _detect_metric(q, low)
     _detect_qualifiers(q, text, low)
@@ -207,7 +213,7 @@ def parse_rules(question: str, drop_tokens: FrozenSet[str] = frozenset()) -> Que
     return q
 
 
-def _detect_entity(q: Query, text: str, low: str) -> None:
+def _detect_entity(q: Query, text: str, low: str, drop_tokens: FrozenSet[str] = frozenset()) -> None:
     q.entity = _detect(ENTITY_PATTERNS, low)
     if q.entity == "closure" and not re.search(r"\b(branch|location|office|lobby|store|atm)\b", low):
         q.entity = None                      # closing an account, not a branch
@@ -218,7 +224,7 @@ def _detect_entity(q: Query, text: str, low: str) -> None:
         q.entity = "closure"
     if q.entity == "eligibility" and ACTION_RE.search(text):
         q.entity = None
-    q.branch = _branch(text)
+    q.branch = _branch(text, drop_tokens)
     if q.entity == "address" and not q.branch and not re.search(r"\bbranch|office|location", low):
         q.entity = None
 

@@ -54,6 +54,8 @@ class KnowledgeSystem:
         sid = snapshot.snapshot_id
         taken = parse_iso(snapshot.taken_on) or date.today()
         self.store.add_snapshot(sid, taken)
+        self.composer.org = institution_name(snapshot.pages) or self.composer.org
+        org_tokens = frozenset(tokenize(self.composer.org))
         boiler = BoilerplateFilter(snapshot.pages)
         pages: Dict[str, dict] = {}
         table_facts = []
@@ -66,13 +68,13 @@ class KnowledgeSystem:
             for t in parse_tables(md):
                 table_facts += table_to_facts(t, p.url, sid, cls, pdate, fetched)
             table_facts += extract_prose_facts(md, p.url, p.title or "", sid, cls, pdate, fetched)
-            for f in extract_entities(md, p.url, p.title or "", sid, cls, pdate, fetched):
+            for f in extract_entities(md, p.url, p.title or "", sid, cls, pdate, fetched, org_tokens):
                 self.store.add(f)
             cleaned = boiler.clean(md)
             self.index.add_page(cleaned, p.url, sid, cls)
             pages[p.url] = {"title": p.title or "", "class": cls, "links": URL_IN_TEXT.findall(md)[:400],
                             "text": strip_markdown(cleaned)[:20000], "date": pdate}
-        rename_generic_products(table_facts)
+        rename_generic_products(table_facts, org_tokens)
         for f in table_facts:
             self.store.add(f)
         # Pages missing from this crawl stay known from the last crawl that had them.
@@ -82,7 +84,6 @@ class KnowledgeSystem:
                 if url not in pages and source.get(url) == prev_sid:
                     pages[url] = {**meta, "class": max(0, meta["class"] - CARRIED_PAGE_PENALTY), "carried_from": prev_sid}
         self.pages[sid] = pages
-        self.composer.org = institution_name(snapshot.pages) or self.composer.org
         self._cache.clear()
         self._conflicts = None
         log.info("ingested %s: %d pages, %d facts", sid, len(snapshot.pages), len(self.store.facts[sid]))

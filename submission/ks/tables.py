@@ -351,12 +351,17 @@ def table_to_facts(table: Table, url: str, snapshot_id: str, authority: int, pag
 
 
 GENERIC_LABEL_RE = re.compile(
-    r"^(?:(?:dupaco )?(?:checking|savings|money market|certificates?|hsa|health savings|share)(?: accounts?)?(?: rates?)?|rates?|account rates?)$", re.I)
+    r"^(?:(?:checking|savings|money market|certificates?|hsa|health savings)(?: accounts?)?(?: rates?)?|rates?|account rates?)$", re.I)
 
 
-def rename_generic_products(facts: List[Fact]) -> None:
-    """A table labelled just 'Checking Accounts' on a promo page is the same product as the authoritative table
-    with the same balance tiers. Give it that product's name so the two can be compared."""
+def _is_generic(product: str, org_tokens) -> bool:
+    words = [w for w in product.split() if w.lower() not in org_tokens]
+    return bool(GENERIC_LABEL_RE.match(" ".join(words)))
+
+
+def rename_generic_products(facts: List[Fact], org_tokens=frozenset()) -> None:
+    """A table labelled just 'Checking Accounts' (or '<Institution> Checking') on a promo page is the same product
+    as the authoritative table with the same balance tiers. Give it that product's name so the two can be compared."""
     from collections import defaultdict
     by_family: dict = defaultdict(list)
     for f in facts:
@@ -369,10 +374,10 @@ def rename_generic_products(facts: List[Fact]) -> None:
             per_table[(f.url, f.extra.get("table"), f.product)].add(f.balance)
         authoritative = {g.product for g in fs if g.authority >= 85}
         for (_url, _tid, product), sig in per_table.items():
-            if not GENERIC_LABEL_RE.match(product) and product in authoritative:
+            if not _is_generic(product, org_tokens) and product in authoritative:
                 sig_products[frozenset(sig)].add(product)
         for f in fs:
-            if GENERIC_LABEL_RE.match(f.product):
+            if _is_generic(f.product, org_tokens):
                 sig = frozenset(per_table[(f.url, f.extra.get("table"), f.product)])
                 cands = sig_products.get(sig, set())
                 if len(cands) == 1:

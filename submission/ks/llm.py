@@ -33,7 +33,7 @@ SCHEMA = """Return ONLY a JSON object with these keys (use null when the questio
   purpose: "purchase","refinance" or null
   entity: one of "routing","phone","branch_count","employee_count","member_count","assets","forbes","eligibility",
           "account_howto","hours_lobby","hours_driveup","address","closure" or null
-  branch: the branch name if one is named (e.g. "Hy-Vee", "Galena", "Mullan Avenue") or null
+  branch: the branch name if one is named (e.g. "Riverside", "Main Street") or null
 Rules: never invent numbers that are not in the question; "CD" means certificate; "car/truck/vehicle" means auto;
 "home loan" means mortgage; a question about a rate for a product uses intent "fact" unless it asks for all of them.
 Output compact JSON on one line, with no code fences and no commentary."""

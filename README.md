@@ -12,7 +12,7 @@ harness/             the organisers' scorer, unchanged
 eval/                the 40 practice questions, unchanged
 starter/             the organisers' naive baseline, unchanged
 tests/               unit tests on synthetic fixtures
-docs/                plan and kit README
+docs/                design notes and kit README
 snapshots/           website crawls go here (not committed)
 ```
 
