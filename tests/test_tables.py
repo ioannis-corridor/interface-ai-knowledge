@@ -1,7 +1,7 @@
 """Markdown rate tables -> facts. Fixtures are synthetic but mirror the real page layouts."""
 from datetime import date
 
-from ks.tables import parse_tables, table_to_facts, rename_generic_products
+from ks.tables import parse_tables, rename_generic_products, table_to_facts
 
 RATES_PAGE = """
 Savings Accounts

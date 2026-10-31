@@ -106,7 +106,7 @@ def extract_entities(markdown: str, url: str, title: str, sid: str, authority: i
                     break
 
     # Hours blocks: "**Lobby**" / "**Drive-up**" followed by day lines.
-    lines = [l.strip() for l in text.splitlines()]
+    lines = [line.strip() for line in text.splitlines()]
     branch = None
     for i, line in enumerate(lines):
         m = re.match(r"^\W*(lobby|drive[- ]?(?:up|thru|through))\b\W*(.*)$", strip_markdown(line), re.I)
@@ -139,7 +139,7 @@ def extract_entities(markdown: str, url: str, title: str, sid: str, authority: i
         m = ADDRESS_RE.match(strip_markdown(line))
         if m:
             street, city, state, zipc = (norm_space(g) for g in m.groups())
-            context = " ".join(strip_markdown(l) for l in lines[max(0, i - 4):i]).lower()
+            context = " ".join(strip_markdown(line) for line in lines[max(0, i - 4):i]).lower()
             is_branch = "dupaco branch" in context or "dupaco credit union" in context
             auth = 100 if (locator and is_branch) else (authority if is_branch or locator else authority - 40)
             facts.append(_mk("entity", f"{city} branch", "address", f"{street}, {city}, {state} {zipc}", url, sid,
@@ -151,10 +151,6 @@ def extract_entities(markdown: str, url: str, title: str, sid: str, authority: i
         facts.append(_mk("entity", f"{b} branch", "address", m.group(2), url, sid, authority, m.group(0),
                          f"{b} branch address", page_date, fetched, city=b, street=m.group(2)))
     return facts
-
-
-def extract_dates(markdown: str) -> List[date]:
-    return [d for d in (parse_long_date(m.group(0)) for m in LONG_DATE_RE.finditer(markdown)) if d]
 
 
 # ---------------------------------------------------------------------- prose facts
@@ -207,11 +203,11 @@ def _metric_from_label(label: str, value: str, family: str) -> str:
 
 
 def extract_prose_facts(markdown: str, url: str, title: str, sid: str, authority: int, page_date: Optional[date],
-                        fetched: Optional[date], snapshot_date: Optional[date]) -> List[Fact]:
+                        fetched: Optional[date]) -> List[Fact]:
     """Facts stated in prose: 'Label: value' lines, '6-month certificate APY 2.95%' sentences, fee-schedule lines."""
-    from .tables import _term, _money_range
+    from .tables import _term
     facts: List[Fact] = []
-    plain_lines = [strip_markdown(l) for l in markdown.splitlines()]
+    plain_lines = [strip_markdown(line) for line in markdown.splitlines()]
     plain = " ".join(plain_lines)
     auth = authority
     m = EXPIRED_RE.search(plain)

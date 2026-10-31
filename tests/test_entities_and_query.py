@@ -51,7 +51,7 @@ def test_prose_entities():
 
 def test_prose_rate_and_fee_lines():
     md = "# Certificates\n\n6-month certificate APY: 2.95%\n\nLost debit card replacement fee: $2.50\n"
-    facts = extract_prose_facts(md, "https://example-cu.test/rates/certificates", "Certificates", "01", 85, None, None, None)
+    facts = extract_prose_facts(md, "https://example-cu.test/rates/certificates", "Certificates", "01", 85, None, None)
     by = {(f.family, f.metric): f for f in facts}
     assert by[("certificate", "apy")].value == "2.95%" and by[("certificate", "apy")].term_months == 6
     assert by[("fee", "fee")].value == "$2.50" and by[("fee", "fee")].product == "Lost debit card replacement"
@@ -59,7 +59,7 @@ def test_prose_rate_and_fee_lines():
 
 def test_expired_promo_sentence_has_low_authority():
     md = "Summer special: 6-month certificate APY 2.95% (offer ended 2025-09-30)"
-    facts = extract_prose_facts(md, "https://example-cu.test/promo", "Promo", "02", 85, None, None, None)
+    facts = extract_prose_facts(md, "https://example-cu.test/promo", "Promo", "02", 85, None, None)
     assert facts and all(f.authority <= 35 for f in facts)
 
 
@@ -100,5 +100,5 @@ def test_query_entities_and_dates():
 
 
 def test_tokenizer_and_number_fingerprint():
-    assert tokenize("Dupaco's CDs and car loans") == ["certificate", "auto", "loan"]
+    assert tokenize("Our CDs and car loans") == ["certificate", "auto", "loan"]
     assert numbers_in("5.39% APR and $1,000 minimum") == {("%", 5.39), ("$", 1000.0)}

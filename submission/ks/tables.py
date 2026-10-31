@@ -44,8 +44,7 @@ class Table:
 
 
 def _split_row(line: str) -> List[str]:
-    cells = [c for c in line.strip().strip("|").split("|")]
-    return [clean_cell(c) for c in cells]
+    return [clean_cell(c) for c in line.strip().strip("|").split("|")]
 
 
 def _is_separator(line: str) -> bool:
@@ -65,9 +64,7 @@ def _context_above(lines: List[str], start: int) -> Tuple[str, str]:
         heading = re.match(r"^#{1,6}\s*(.+)$", s)
         if link_item:
             cand = norm_space(link_item.group(1))
-            if not section and label:
-                section = cand
-            elif not label and "rate" in cand.lower():
+            if (label and not section) or (not label and "rate" in cand.lower()):
                 section = cand
             continue
         if heading:
@@ -79,10 +76,9 @@ def _context_above(lines: List[str], start: int) -> Tuple[str, str]:
                 label = cand
             continue
         if "](" in s or len(s) > 70 or s.endswith(("?", ".", "!")) or s.startswith(("-", "*", "[", "_")):
-            if "](" in s and re.sub(r"\[[^\]]*\]\([^)]*\)", "", s).strip() == "":
-                continue  # a row of CTA links; skip
-            if not label:
-                continue
+            only_links = "](" in s and re.sub(r"\[[^\]]*\]\([^)]*\)", "", s).strip() == ""
+            if only_links or not label:
+                continue  # a row of CTA links, or prose above a table that has no label yet
             break
         cand = clean_cell(s)
         if not label:
@@ -122,7 +118,7 @@ def parse_tables(markdown: str) -> List[Table]:
             block = lines[i:j]
             if len(block) >= 3 and _is_separator(block[1]):
                 header = _split_row(block[0])
-                rows = [r for r in (_split_row(l) for l in block[2:]) if any(c for c in r)]
+                rows = [r for r in (_split_row(ln) for ln in block[2:]) if any(c for c in r)]
                 label, section = _context_above(lines, i)
                 out.append(Table(header, rows, label, section, _effective_below(lines, j), "\n".join(block)))
             i = j
@@ -239,6 +235,26 @@ def _money_range(text: str) -> Optional[Tuple[float, float]]:
     return None
 
 
+# Tables that belong on a page of this family (an auto table on the checking page is off topic and loses authority).
+RELATED_FAMILIES = {
+    "deposit": {"savings", "money_market", "hsa", "certificate", "ira"},
+    "ira": {"ira", "certificate", "savings"},
+    "mortgage": {"mortgage", "heloc", "home_equity_loan", "home_improvement"},
+    "home_equity_loan": {"home_equity_loan", "heloc", "mortgage", "home_improvement"},
+}
+OFF_TOPIC_PENALTY = 40
+
+
+def _off_topic(page_family: Optional[str], family: str) -> bool:
+    if not page_family or page_family in ("business", "contact"):
+        return False
+    return family not in RELATED_FAMILIES.get(page_family, {page_family})
+
+
+def _cell(row: List[str], index: Optional[int]) -> str:
+    return row[index] if index is not None and index < len(row) else ""
+
+
 def _value_text(cell: str) -> str:
     v = norm_space(re.sub(r"\b(APR|APY)\b", "", cell).replace(" %", "%"))
     m = re.match(r"(\d+(?:\.\d+)?%)(\s*-\s*\d+(?:\.\d+)?%)?", v)
@@ -269,8 +285,7 @@ def table_to_facts(table: Table, url: str, snapshot_id: str, authority: int, pag
     for row in table.rows:
         if len(row) < 2:
             continue
-        cell = lambda i: row[i] if i is not None and i < len(row) else ""
-        product_text, tier_text, term_text = cell(product_col), cell(tier_col), cell(term_col)
+        product_text, tier_text, term_text = (_cell(row, product_col), _cell(row, tier_col), _cell(row, term_col))
         family = detect_family(table.label, table.section, product_text, tier_text, header_text, url)
         if not family:
             continue
@@ -309,13 +324,7 @@ def table_to_facts(table: Table, url: str, snapshot_id: str, authority: int, pag
             purpose = "refinance"
         elif family == "mortgage" and "purchase" in low_label:
             purpose = "purchase"
-        auth = authority
-        if page_family and page_family not in ("business", "contact") and family != page_family:
-            if not (page_family == "deposit" and family in ("savings", "money_market", "hsa", "certificate", "ira")) and \
-                    not (page_family == "ira" and family in ("certificate", "savings")) and \
-                    not (page_family == "mortgage" and family in ("heloc", "home_equity_loan", "home_improvement")) and \
-                    not (page_family == "home_equity_loan" and family in ("heloc", "mortgage", "home_improvement")):
-                auth -= 40
+        auth = authority - (OFF_TOPIC_PENALTY if _off_topic(page_family, family) else 0)
         quote = " | ".join(c for c in row if c)
         for idx, role in roles.items():
             if role not in NUMERIC_ROLES or idx >= len(row) or not _has_number(row[idx]):
@@ -353,13 +362,13 @@ def rename_generic_products(facts: List[Fact]) -> None:
     for f in facts:
         if f.balance and f.family in ("checking", "savings", "money_market", "hsa"):
             by_family[f.family].append(f)
-    for fam, fs in by_family.items():
+    for fs in by_family.values():
         sig_products: dict = defaultdict(set)
         per_table: dict = defaultdict(set)
         for f in fs:
             per_table[(f.url, f.extra.get("table"), f.product)].add(f.balance)
         authoritative = {g.product for g in fs if g.authority >= 85}
-        for (url, tid, product), sig in per_table.items():
+        for (_url, _tid, product), sig in per_table.items():
             if not GENERIC_LABEL_RE.match(product) and product in authoritative:
                 sig_products[frozenset(sig)].add(product)
         for f in fs:

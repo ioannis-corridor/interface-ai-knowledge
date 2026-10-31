@@ -1,0 +1,16 @@
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+src = ["submission", "tests"]
+extend-exclude = ["harness", "starter"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "I", "SIM", "C4", "RET", "ARG", "N"]
+ignore = ["E501"]   # long regex literals and template strings are clearer on one line
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

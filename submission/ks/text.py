@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 from datetime import date, datetime
-from typing import Iterable, Optional
+from typing import Optional
 
 MONTHS = {m.lower(): i for i, m in enumerate(
     ["January", "February", "March", "April", "May", "June", "July", "August",
@@ -16,10 +16,8 @@ EFFECTIVE_RE = re.compile(r"effective\s+(?:as\s+of\s+)?(\d{1,2}/\d{1,2}/\d{2,4})
 
 LINK_RE = re.compile(r"\[([^\]]*)\]\([^)]*\)")
 IMAGE_RE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
-URL_RE = re.compile(r"https?://\S+")
 FOOTNOTE_RE = re.compile(r"(%|\bAPR|\bAPY)(\d)\b")            # "4.10%2" -> "4.10%", "5.39% APR1" -> "5.39% APR"
 PCT_RE = re.compile(r"\d+(?:\.\d+)?\s*%")
-MONEY_RE = re.compile(r"\$\s?\d[\d,]*(?:\.\d+)?")
 # Mirrors the scorer: a number with optional $ / % unit.
 NUM_RE = re.compile(r"(\$)?\s*(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d+))?\s*(%|percent)?", re.I)
 
@@ -29,7 +27,7 @@ STOPWORDS = {
     "tell", "that", "the", "their", "there", "these", "they", "this", "to", "we", "what", "whats", "which",
     "who", "will", "with", "would", "you", "your", "yours", "about", "any", "some", "right", "now",
     "current", "currently", "today", "know", "want", "like", "need", "should", "offer", "offers",
-    "dupaco", "dupacos", "credit", "union", "repeat", "again", "say", "said", "also", "just", "much",
+    "credit", "union", "repeat", "again", "say", "said", "also", "just", "much",
     "many", "when", "where", "why", "did", "was", "were", "has", "had", "been", "being", "am", "pm",
 }
 
@@ -176,7 +174,3 @@ def range_text(lo: Optional[float], hi: Optional[float]) -> str:
     if lo is None or lo <= 0.01:
         return f"up to {fmt_money(hi)}"
     return f"{fmt_money(lo)} to {fmt_money(hi)}"
-
-
-def join_tokens(toks: Iterable[str]) -> str:
-    return " ".join(toks)
