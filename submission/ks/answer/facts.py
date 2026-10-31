@@ -4,6 +4,7 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 from dataclasses import dataclass, field
+from datetime import timedelta
 from typing import Dict, List, Optional
 
 from ..format import has_term_words, metric_word, month_text, product_name, term_text, tidy, tier_phrase
@@ -17,8 +18,8 @@ from .draft import GONE, NOT_ON_SHEET, NOT_YET, REFUSE_RATE, Draft
 NO_RATE_FAMILIES = {"construction", "student_loan"}
 GENERIC_LOAN_FAMILIES = {"auto", "atv", "boat_rv", "personal_loan", "home_improvement", "home_equity_loan"}
 RATE_METRICS = ("apy", "dividend_rate", "apr", "rate")
-AUTHORITATIVE = 85          # rate sheets and product pages
-SECONDARY = 60              # below this: promo landing pages, calculators, files, carried copies
+AUTHORITATIVE = 85          # rate sheets and product pages; everything else needs a date to count as current
+UNDATED_SHEET_WINDOW_DAYS = 180
 MIN_METRICS = ("min_open", "min_earn")
 MAX_TIERS_LISTED = 14
 GENERIC_PRODUCT_RE = re.compile(r"\b(IRAs|Certificates|Accounts|Loans|Rates)$", re.I)
@@ -29,7 +30,8 @@ Tiers = Dict[tuple, List[Fact]]
 class Candidates:
     facts: List[Fact]
     metric: str
-    dropped: List[Fact] = field(default_factory=list)   # low-authority copies set aside (calculators, promos)
+    dropped: List[Fact] = field(default_factory=list)   # copies set aside: promos, calculators, old articles, carried pages
+    ended_copy: Optional[Fact] = None                    # set when only such copies matched: the offer looks ended
 
     def tiers(self) -> Tiers:
         out: Tiers = defaultdict(list)
@@ -90,24 +92,39 @@ class FactAnswers(AnswerBase):
             c = [f for f in c if f.intro == q.intro]
         elif fam == "credit_card":
             c = [f for f in c if not f.intro] or c
-        dropped: List[Fact] = []
-        if any(f.authority >= 85 for f in c):            # calculators and promo pages only count when nothing better exists
-            dropped = [f for f in c if f.authority < 60]
-            c = [f for f in c if f.authority >= 60]
-        return Candidates(c, metric, dropped)
+        primary = self.primary_facts(c, sid, fam, metric)
+        if primary:
+            return Candidates(primary, metric, [f for f in c if f not in primary])
+        if c:
+            return Candidates([], metric, c, ended_copy=best_of(c))   # only leftovers: the offer looks ended
+        return Candidates([], metric)
 
-    def _only_secondary(self, cands: Candidates, sid: str) -> bool:
-        """True when every match is a promo/calculator/carried copy while an authoritative page covers the family."""
-        if max(f.authority for f in cands.facts) >= SECONDARY:
-            return False
-        return any(f.authority >= AUTHORITATIVE and f.metric == cands.metric for f in self.facts(sid, cands.facts[0].family))
+    def primary_facts(self, facts: List[Fact], sid: str, fam: str, metric: str) -> List[Fact]:
+        """Facts that may state a current value. Rate sheets and product pages always may. A promo page, calculator,
+        file, press release or blog post may only when the authoritative pages do not cover this family, or when
+        its own date is at or after the family's newest rate-sheet date (new information rather than a leftover)."""
+        sheet_date = self._family_sheet_date(sid, fam, metric)
+        if sheet_date is None:
+            return facts
+        out = []
+        for f in facts:
+            if f.authority >= AUTHORITATIVE:
+                out.append(f)
+            else:
+                own = f.effective or f.article_date
+                if own is not None and own >= sheet_date:
+                    out.append(f)
+        return out
 
-    @staticmethod
-    def authoritative_only(facts: List[Fact]) -> List[Fact]:
-        """Drop promo/calculator copies when an authoritative page covers the same family."""
-        if any(f.authority >= AUTHORITATIVE for f in facts):
-            return [f for f in facts if f.authority >= SECONDARY]
-        return facts
+    def _family_sheet_date(self, sid: str, fam: str, metric: str):
+        """Newest 'effective as of' date among authoritative facts of this family and metric, or None when no
+        authoritative page covers the family (then nothing can be called a leftover). An undated sheet is anchored
+        to the crawl: a secondary copy then has to be from the last six months to count as current."""
+        auth = [f for f in self.facts(sid, fam) if f.authority >= AUTHORITATIVE and f.metric == metric]
+        if not auth:
+            return None
+        dates = [f.effective for f in auth if f.effective]
+        return max(dates) if dates else self.store.taken_on(sid) - timedelta(days=UNDATED_SHEET_WINDOW_DAYS)
 
     @staticmethod
     def stale_note(win: Fact, dropped: List[Fact]) -> Optional[str]:
@@ -125,15 +142,18 @@ class FactAnswers(AnswerBase):
         if fam in NO_RATE_FAMILIES or fam is None:
             return Draft.refuse(REFUSE_RATE, thing=self.thing(q), org=self.org)
         cands = self.candidates(q, sid)
-        if cands.facts and self._only_secondary(cands, sid):
-            # The rate sheet covers this family but not this product: a promo or calculator page is all that is
-            # left of it. "A promotion ends, but its page is never taken down" is the kit's headline failure mode.
-            best = best_of(cands.facts)
-            draft = Draft.refuse(NOT_ON_SHEET, thing=self.thing(q), org=self.org)
-            draft.conflict_note = (f"Only {url_key(best.url)} (authority {best.authority}) still shows "
-                                   f"{best.value} {metric_word(best.metric)}; the current rate sheet does not list it.")
-            return draft
         if not cands.facts:
+            if cands.ended_copy:
+                # The rate sheet covers this family but not this product: a promo page, calculator or old article is
+                # all that is left of it. "A promotion ends, but its page is never taken down" is the kit's headline
+                # failure mode, so the member hears that it is not on the current rate sheet.
+                left = cands.ended_copy
+                draft = Draft.refuse(NOT_ON_SHEET, thing=self.thing(q), org=self.org)
+                when = left.effective or left.article_date
+                draft.conflict_note = (f"Only {url_key(left.url)} (authority {left.authority}"
+                                       f"{', dated ' + when.isoformat() if when else ''}) still shows {left.value} "
+                                       f"{metric_word(left.metric)}; the current rate sheet does not list it.")
+                return draft
             if sid != self.store.latest and self.candidates(q, self.store.latest).facts:
                 return Draft.refuse(NOT_YET, org=self.org)
             last = self._last_seen(q, sid)
@@ -302,7 +322,8 @@ class FactAnswers(AnswerBase):
     def _list_cards(self, sid: str) -> Draft:
         """Personal and business cards together, intro offers left out."""
         by: Dict[str, List[Fact]] = defaultdict(list)
-        for f in self.authoritative_only([f for f in self.facts(sid, "credit_card") if f.metric == "apr" and not f.intro]):
+        cards = [f for f in self.facts(sid, "credit_card") if f.metric == "apr" and not f.intro]
+        for f in self.primary_facts(cards, sid, "credit_card", "apr"):
             by[f.product].append(f)
         parts, used = [], []
         for product in sorted(by, key=lambda p: (p.startswith("Business"), p)):
@@ -314,7 +335,7 @@ class FactAnswers(AnswerBase):
         return Draft(f"{self.org} offers " + "; ".join(parts) + ".", used, self.sources(used, 4))
 
     def _list_certificates(self, q, sid: str, fam: str) -> Draft:
-        pool = self.authoritative_only([f for f in self.facts(sid, fam) if f.metric == "apy"])
+        pool = self.primary_facts([f for f in self.facts(sid, fam) if f.metric == "apy"], sid, fam, "apy")
         fs = [f for f in pool if f.business == bool(q.business)] or pool
         if not fs:
             return Draft.refuse(REFUSE_RATE, thing=self.thing(q), org=self.org)
@@ -408,4 +429,8 @@ class FactAnswers(AnswerBase):
         if q.family == "student_loan":
             return "student loans"
         name = q.product or FAMILY_NAMES.get(q.family, "that product")
-        return f"a {term_text(q.term_months)} {name}" if q.term_months else name
+        if not q.term_months:
+            return name
+        term = term_text(q.term_months)
+        article = "an" if re.match(r"^(8|11|18|8\d)\b", term) else "a"
+        return f"{article} {term} {name}"
