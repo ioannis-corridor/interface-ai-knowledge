@@ -1,0 +1,4 @@
+# Core system: Python standard library only.
+# Optional: a small Anthropic call parses questions the rule-based parser cannot place. Used only when
+# ANTHROPIC_API_KEY is set; everything else runs without it.
+anthropic>=0.40
