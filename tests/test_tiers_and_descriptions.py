@@ -100,3 +100,53 @@ def test_fragment_filters():
     assert _is_sentence("No monthly fees and no minimum balance and no hoops to jump through at all")
     chunks = split_chunks("[Open my Holiday Club](https://x.test/a) [See details](https://x.test/b)\n\nLaunchpad Savings\n")
     assert chunks == []
+
+
+PROMO = """# Member money market offer | Example CU
+Achieve Money Market
+
+| Account Type | Balance Tier | Dividend Rate | Annual Percentage Yield (APY) |
+| --- | --- | --- | --- |
+| Achieve Money Market | $25,000+ | 3.20% | 3.25% |
+
+| Certificate | Dividend Rate | Annual Percentage Yield (APY) | Min. to Earn |
+| --- | --- | --- | --- |
+| 25 Month Fixed Certificate Special | 3.57% | 3.60% | $1,000.00 |
+"""
+
+
+def _two_snapshot_promo(keep_promo_in_second: bool):
+    ks = KnowledgeSystem(contract, use_llm=False)
+    first = [contract.Page(url="https://x.test/rates", title="Rates | Example CU", markdown=RATES_MAY, fetched_at="2026-05-12T00:00:00Z"),
+             contract.Page(url="https://x.test/membermoneymarket-lp", title="Offer | Example CU", markdown=PROMO, fetched_at="2026-05-12T00:00:00Z")]
+    second = [contract.Page(url="https://x.test/rates", title="Rates | Example CU", markdown=RATES_SEP, fetched_at="2026-09-28T00:00:00Z")]
+    if keep_promo_in_second:
+        second.append(contract.Page(url="https://x.test/membermoneymarket-lp", title="Offer | Example CU", markdown=PROMO, fetched_at="2026-09-28T00:00:00Z"))
+    ks.ingest(contract.Snapshot("01_2026-05-12", "2026-05-12", first))
+    ks.ingest(contract.Snapshot("02_2026-09-28", "2026-09-28", second))
+    return ks
+
+
+def test_product_left_only_on_a_promo_page_is_treated_as_ended():
+    for keep in (True, False):           # the promo page is still crawled / the promo page vanished
+        ks = _two_snapshot_promo(keep)
+        a = ks.answer("What is the 25-month certificate special APY?")
+        assert not a.confident and "3.60" not in a.text and not numbers_in(a.text) - numbers_in("25-month")
+        assert a.conflict_note and "3.60%" in a.conflict_note
+        assert "3.60%" in ks.answer("What is the 25-month certificate special APY?", as_of="2026-05-31").text
+        listed = ks.answer("What are all your certificate rates?")
+        assert "25 Month" not in listed.text and "4.10%" in listed.text
+
+
+def test_vanished_promo_page_is_not_carried_forward_but_vanished_info_pages_are():
+    ks = _two_snapshot_promo(keep_promo_in_second=False)
+    assert "https://x.test/membermoneymarket-lp" not in ks.store.url_source("02_2026-09-28")
+    assert ks.store.url_source("02_2026-09-28")["https://x.test/rates"] == "02_2026-09-28"
+
+
+def test_explicit_metric_gives_a_single_number():
+    ks = _two_snapshot_promo(True)
+    explicit = ks.answer("What is the APY on the 17-month certificate special?")
+    assert "4.10%" in explicit.text and "4.06" not in explicit.text
+    ambiguous = ks.answer("What is the rate on the 17-month certificate special?")
+    assert "4.10%" in ambiguous.text                                # APY leads for deposits; companion allowed

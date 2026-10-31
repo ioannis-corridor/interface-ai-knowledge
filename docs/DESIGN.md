@@ -50,7 +50,9 @@ ingest(snapshot)                     answer(question, as_of)                  co
                                          refusals, one value per fact
 ```
 
-Authority classes decide only when two sources disagree on the same fact: rate sheet (100) > product page (90) >
+Absence from the authoritative source is also a signal: a product that appears only on promo or calculator
+pages while the rate sheet covers its family is treated as an ended offer, and vanished promo pages are not
+carried forward. Authority classes decide only when two sources disagree on the same fact: rate sheet (100) > product page (90) >
 contact and about pages (85) > newsroom (60) > blog (50) > promo landing page (40) > calculator and legal pages
 (30) > files (20). A table that does not match its page (an auto table on the checking page) loses 40 points. A
 page missing from a crawl is served from the newest earlier crawl at 10 points less.

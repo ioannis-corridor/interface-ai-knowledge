@@ -28,15 +28,15 @@ pip install -r requirements.txt
 python harness/run_eval.py --submission submission --eval eval/public_eval.jsonl
 ```
 
-The optional LLM parser turns on only when `ANTHROPIC_API_KEY` is set in the environment of the process running
-the scorer; no key is stored in the repository. Without it, the rule-based parser handles every question.
-`KS_DISABLE_LLM=1` forces the offline path even when a key is present.
+The run is offline and deterministic by default. An optional LLM question parser exists as an experiment: set
+both `KS_USE_LLM=1` and `ANTHROPIC_API_KEY` in the environment of the process running the scorer to turn it on.
+No key is stored in the repository, and the rule-based parser handles every question without it.
 
 ## Quality checks
 
 ```bash
 pip install pytest ruff
-scripts/check.sh                   # lint, 64 tests (90% line coverage), harness self-test, both question sets
+scripts/check.sh                   # lint, 67 tests (90% line coverage), harness self-test, both question sets
 ```
 
 Or step by step:

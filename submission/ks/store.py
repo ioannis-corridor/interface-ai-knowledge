@@ -12,8 +12,10 @@ from datetime import date
 from typing import Callable, Dict, List, Optional, Set, Tuple
 
 from .model import Fact
+from .pages import CALCULATOR, LANDING
 
 CARRY_PENALTY = 10
+NOT_CARRIED = {LANDING, CALCULATOR}     # a vanished promo page means the offer ended, not that the crawler missed it
 
 
 class FactStore:
@@ -21,6 +23,7 @@ class FactStore:
         self.snapshots: List[Tuple[str, date]] = []          # (snapshot_id, taken_on) oldest first
         self.facts: Dict[str, List[Fact]] = defaultdict(list)   # own facts per snapshot
         self.page_urls: Dict[str, Set[str]] = defaultdict(set)
+        self.page_class: Dict[str, int] = {}
         self._effective: Dict[str, List[Fact]] = {}
         self._by_family: Dict[str, Dict[str, List[Fact]]] = {}
         self._url_source: Dict[str, Dict[str, str]] = {}
@@ -37,8 +40,9 @@ class FactStore:
         self._effective.pop(fact.snapshot_id, None)
         self._by_family.pop(fact.snapshot_id, None)
 
-    def add_page(self, snapshot_id: str, url: str) -> None:
+    def add_page(self, snapshot_id: str, url: str, page_class: int = 0) -> None:
         self.page_urls[snapshot_id].add(url)
+        self.page_class[url] = page_class
 
     @property
     def latest(self) -> str:
@@ -65,9 +69,13 @@ class FactStore:
             src: Dict[str, str] = {}
             for s, _ in self.snapshots:
                 for u in self.page_urls[s]:
-                    src[u] = s
+                    if s == sid or self.page_class.get(u) not in NOT_CARRIED:
+                        src[u] = s
                 if s == sid:
                     break
+            for u in list(src):
+                if src[u] != sid and u not in self.page_urls[sid] and self.page_class.get(u) in NOT_CARRIED:
+                    del src[u]
             self._url_source[sid] = src
         return self._url_source[sid]
 

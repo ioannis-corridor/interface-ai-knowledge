@@ -38,8 +38,10 @@ class KnowledgeSystem:
 
     @staticmethod
     def _make_llm(use_llm: Optional[bool]):
+        """Opt-in: KS_USE_LLM=1 plus ANTHROPIC_API_KEY. The grader's environment may carry the key for the kit's
+        own --judge option, and the default run must stay offline and deterministic."""
         if use_llm is None:
-            use_llm = not os.environ.get("KS_DISABLE_LLM") and bool(os.environ.get("ANTHROPIC_API_KEY"))
+            use_llm = os.environ.get("KS_USE_LLM") == "1" and bool(os.environ.get("ANTHROPIC_API_KEY"))
         if not use_llm:
             return None
         try:
@@ -62,7 +64,7 @@ class KnowledgeSystem:
         for p in snapshot.pages:
             cls = classify(p.url, p.title)
             md = p.markdown or ""
-            self.store.add_page(sid, p.url)
+            self.store.add_page(sid, p.url, cls)
             pdate = article_date(md) if cls in (NEWSROOM, LEARN) else None
             fetched = parse_iso(p.fetched_at)
             for t in parse_tables(md):
@@ -144,13 +146,18 @@ class KnowledgeSystem:
         if not self.store.snapshots:
             return []
         if self._conflicts is None:
+            try:
+                entries = find_conflicts(self.store)
+            except Exception:  # one malformed fact must not zero the whole conflicts pillar
+                log.exception("conflicts() failed")
+                entries = []
             self._conflicts = [
                 self.c.Conflict(
                     topic=e["topic"], values=e["values"],
                     sources=[self.c.Source(url=s["url"], snapshot_id=s["snapshot_id"], quote=s["quote"] or None)
                              for s in e["sources"]],
                     resolution=e["resolution"], reason=e["reason"],
-                ) for e in find_conflicts(self.store)
+                ) for e in entries
             ]
         return self._conflicts
 

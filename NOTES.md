@@ -41,6 +41,12 @@ Authority only matters when two sources disagree on the same fact. The order is:
 A page is not stale because it is old. The Hy-Vee closing date comes from a 2025 release that nothing
 newer contradicts.
 
+Absence from the authoritative source is a signal too. If the rate sheet covers a product family but a product
+or tier appears only on promo landing pages, calculators or files, the system treats the offer as ended: it
+refuses with a "the current rate sheet doesn't list it" message and keeps the leftover value in
+`conflict_note`. For the same reason, vanished promo and calculator pages are not carried forward; vanished
+informational pages (the fee schedule, the contact page) are.
+
 ## How a question is answered
 
 1. A rule-based parser turns the question into a structured query: intent, product family, product name,
@@ -78,15 +84,18 @@ Sibling tiers that went stale together are one entry. Each entry names the winni
 
 ## API keys
 
-None are required, and nothing in this repository contains one. The system runs fully offline on the snapshots.
+None are required, and nothing in this repository contains one. The default run is fully offline and
+deterministic, and that is the configuration to grade.
 
-If the environment variable `ANTHROPIC_API_KEY` is set when the scorer runs (for example `export
-ANTHROPIC_API_KEY=... && python harness/run_eval.py ...`), the system makes one call to `claude-haiku-5-5`
-for a question the rules cannot classify. The call returns a structured query only. It never sees website text
-and never writes answer text. Each call has a 3-second cap; on a timeout or any error the rules answer. Set
-`KS_DISABLE_LLM=1` to force the offline path, or `KS_LLM_MODEL` to change the model. Measured on the practice
-set, the call changes no answers and adds about 0.8 seconds at p95 for the few questions that use it. This is a
-paid API; the kit's own `--judge` option reads the same variable.
+An optional LLM question parser exists as an experiment. It is off unless both `KS_USE_LLM=1` and
+`ANTHROPIC_API_KEY` are set in the environment of the process running the scorer (for example
+`KS_USE_LLM=1 ANTHROPIC_API_KEY=... python harness/run_eval.py ...`). When on, the system makes one call to
+`claude-haiku-5-5` for a question the rules cannot classify. The call returns a structured query only; it never
+sees website text and never writes answer text. Each call has a 3-second cap and any error falls back to the
+rules. `KS_LLM_MODEL` changes the model. Measured on the practice set the parser changes no answers and adds
+about 0.8 seconds at p95, which is why it is opt-in: the kit's own `--judge` option reads the same key variable,
+and a graded run should not pick up a paid network dependency by accident. It did help on phrasings the rules
+cannot place ("rate on a used pickup from 2019, 5 year loan"), so it stays available.
 
 ## Results
 
@@ -102,11 +111,20 @@ regression set. `scripts/check.sh` runs lint, the unit tests, the self-test and 
 ## Code quality
 
 - `ruff check submission tests` passes with the rule set in `pyproject.toml`.
-- 64 tests on synthetic fixtures cover table parsing, prose extraction, the query parser, the store and index,
+- 67 tests on synthetic fixtures cover table parsing, prose extraction, the query parser, the store and index,
   conflicts, the LLM merge (stubbed client), every answer handler, and two-snapshot end-to-end flows. Line
   coverage is 90%.
 - CI runs lint, tests and the harness self-test on Python 3.9, 3.11 and 3.12.
-- `answer()` never raises: a handler bug is logged and turns into a digit-free refusal.
+- `answer()` and `conflicts()` never raise: a handler bug is logged and turns into a digit-free refusal or an
+  empty list.
+
+## What is and is not site-specific
+
+The institution's name is read from page titles, and the parsers take it as a parameter rather than matching it.
+The product vocabulary (product aliases, link targets, promo paths), the US state list used for the charter area,
+the online-banking wording in the account how-to answer, and the regexes for counts in press-release boilerplate
+are tuned to this website. Pointing the system at another credit union would mean revisiting those tables; the
+fact model, authority rules, snapshot history and retrieval would carry over unchanged.
 
 ## Limits
 

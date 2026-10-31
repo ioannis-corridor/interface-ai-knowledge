@@ -1,9 +1,5 @@
 """The LLM wrapper without network: response parsing, type cleaning, failure handling, caching."""
-import pytest
-
-anthropic = pytest.importorskip("anthropic")
-
-from ks.llm import LLMParser, _clean  # noqa: E402
+from ks.llm import LLMParser, _clean
 
 
 class _Block:

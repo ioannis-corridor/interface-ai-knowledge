@@ -14,7 +14,7 @@ NUMBER_WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, 
 
 FAMILY_PATTERNS = [
     ("ira", r"\biras?\b|\broth\b|\btraditional ira\b|retirement account"),
-    ("certificate", r"\bcds?\b|certificate|term[- ]share|share cert|\bjumbo\b"),
+    ("certificate", r"\bcds?\b|certificate|term[- ]share|share cert|\bjumbo\b|\d+[- ]month (?:fixed |jumbo )?special"),
     ("money_market", r"money market|investor'?s choice"),
     ("hsa", r"health savings|\bhsa\b"),
     ("checking", r"checking|1st rate|first rate"),
@@ -37,6 +37,7 @@ PRODUCT_PATTERNS = [
     (r"share savings", "Share Savings"), (r"bright savings|\bbright\b", "Bright Savings"),
     (r"you[- ]name[- ]it", "You Name It Savings"), (r"holiday club", "Holiday Club Savings"),
     (r"launchpad", "Launchpad Savings"), (r"high[- ]yield", "High-Yield Savings"),
+    (r"achieve money market|\bachieve\b", "Achieve Money Market"),
     (r"investor'?s choice|money market", "Investor's Choice Money Market"),
     (r"1st rate|first rate", "1st Rate Checking"), (r"free checking", "Free Checking"),
     (r"health savings|\bhsa\b", "Health Savings Account"),
@@ -76,7 +77,7 @@ MONEY_IN_Q_RE = re.compile(r"\$\s?(\d[\d,]*(?:\.\d+)?)(k)?\b", re.I)
 
 
 DEPOSIT_FAMILIES = {"certificate", "ira", "savings", "money_market", "hsa", "checking"}
-PRODUCT_FAMILY = {"Investor's Choice Money Market": "money_market", "Health Savings Account": "hsa",
+PRODUCT_FAMILY = {"Investor's Choice Money Market": "money_market", "Achieve Money Market": "money_market", "Health Savings Account": "hsa",
                   "1st Rate Checking": "checking", "Free Checking": "checking", "Share Savings": "savings",
                   "Bright Savings": "savings", "You Name It Savings": "savings", "Holiday Club Savings": "savings",
                   "Launchpad Savings": "savings", "High-Yield Savings": "savings", "Platinum Visa": "credit_card",
@@ -90,6 +91,7 @@ class Query:
     family: Optional[str] = None
     product: Optional[str] = None
     metric: Optional[str] = None   # apy | dividend_rate | apr | rate | min_open | min_earn
+    metric_explicit: bool = False  # the question named the metric (APY, APR, dividend rate)
     term_months: Optional[int] = None
     model_year: Optional[int] = None
     balance: Optional[float] = None
@@ -259,11 +261,11 @@ def _detect_metric(q: Query, low: str) -> None:
         q.metric = "min_earn"
         return
     if re.search(r"\bapy\b|yield", low):
-        q.metric = "apy"
+        q.metric, q.metric_explicit = "apy", True
     elif re.search(r"dividend rate", low):
-        q.metric = "dividend_rate"
+        q.metric, q.metric_explicit = "dividend_rate", True
     elif re.search(r"\bapr\b", low):
-        q.metric = "apr"
+        q.metric, q.metric_explicit = "apr", True
     elif re.search(r"\brates?\b|interest|percent|pay|earn|how much", low):
         q.metric = "rate"
     if q.metric == "rate" and q.family:      # "rate" means APY for deposits and APR for loans

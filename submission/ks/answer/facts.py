@@ -12,11 +12,13 @@ from ..pages import url_key
 from ..store import best_of
 from ..text import pct_values
 from .base import DEPOSIT, PRIMARY_METRIC, AnswerBase, product_match
-from .draft import GONE, NOT_YET, REFUSE_RATE, Draft
+from .draft import GONE, NOT_ON_SHEET, NOT_YET, REFUSE_RATE, Draft
 
 NO_RATE_FAMILIES = {"construction", "student_loan"}
 GENERIC_LOAN_FAMILIES = {"auto", "atv", "boat_rv", "personal_loan", "home_improvement", "home_equity_loan"}
 RATE_METRICS = ("apy", "dividend_rate", "apr", "rate")
+AUTHORITATIVE = 85          # rate sheets and product pages
+SECONDARY = 60              # below this: promo landing pages, calculators, files, carried copies
 MIN_METRICS = ("min_open", "min_earn")
 MAX_TIERS_LISTED = 14
 GENERIC_PRODUCT_RE = re.compile(r"\b(IRAs|Certificates|Accounts|Loans|Rates)$", re.I)
@@ -94,6 +96,19 @@ class FactAnswers(AnswerBase):
             c = [f for f in c if f.authority >= 60]
         return Candidates(c, metric, dropped)
 
+    def _only_secondary(self, cands: Candidates, sid: str) -> bool:
+        """True when every match is a promo/calculator/carried copy while an authoritative page covers the family."""
+        if max(f.authority for f in cands.facts) >= SECONDARY:
+            return False
+        return any(f.authority >= AUTHORITATIVE and f.metric == cands.metric for f in self.facts(sid, cands.facts[0].family))
+
+    @staticmethod
+    def authoritative_only(facts: List[Fact]) -> List[Fact]:
+        """Drop promo/calculator copies when an authoritative page covers the same family."""
+        if any(f.authority >= AUTHORITATIVE for f in facts):
+            return [f for f in facts if f.authority >= SECONDARY]
+        return facts
+
     @staticmethod
     def stale_note(win: Fact, dropped: List[Fact]) -> Optional[str]:
         stale = [f for f in dropped if f.value != win.value and f.term_months == win.term_months and f.metric == win.metric]
@@ -110,6 +125,14 @@ class FactAnswers(AnswerBase):
         if fam in NO_RATE_FAMILIES or fam is None:
             return Draft.refuse(REFUSE_RATE, thing=self.thing(q), org=self.org)
         cands = self.candidates(q, sid)
+        if cands.facts and self._only_secondary(cands, sid):
+            # The rate sheet covers this family but not this product: a promo or calculator page is all that is
+            # left of it. "A promotion ends, but its page is never taken down" is the kit's headline failure mode.
+            best = best_of(cands.facts)
+            draft = Draft.refuse(NOT_ON_SHEET, thing=self.thing(q), org=self.org)
+            draft.conflict_note = (f"Only {url_key(best.url)} (authority {best.authority}) still shows "
+                                   f"{best.value} {metric_word(best.metric)}; the current rate sheet does not list it.")
+            return draft
         if not cands.facts:
             if sid != self.store.latest and self.candidates(q, self.store.latest).facts:
                 return Draft.refuse(NOT_YET, org=self.org)
@@ -134,10 +157,10 @@ class FactAnswers(AnswerBase):
                 pages = sorted({url_key(f.url) for f in losers})
                 note = (f"Other pages ({', '.join(pages)}) still show {', '.join(vals)} for an older tier table; "
                         f"the rate page is authoritative.")
-            return self.single(sid, win, agree, note or self.stale_note(win, cands.dropped), cands.metric)
+            return self.single(sid, win, agree, note or self.stale_note(win, cands.dropped), cands.metric, q.metric_explicit)
         if len(tiers) == 1:
             win, agree, note = self.resolve(cands.facts)
-            return self.single(sid, win, agree, note or self.stale_note(win, cands.dropped), cands.metric)
+            return self.single(sid, win, agree, note or self.stale_note(win, cands.dropped), cands.metric, q.metric_explicit)
         if q.superlative:
             return self.superlative(q, sid, tiers, cands.metric)
         return self.multi(sid, tiers, cands.metric)
@@ -152,13 +175,18 @@ class FactAnswers(AnswerBase):
                 return earlier, best_of(found)
         return None
 
-    def single(self, sid: str, win: Fact, agree: List[Fact], note: Optional[str], metric: str) -> Draft:
+    def single(self, sid: str, win: Fact, agree: List[Fact], note: Optional[str], metric: str,
+               metric_explicit: bool = False) -> Draft:
+        """One value. The companion metric (dividend rate next to an APY, APR next to a mortgage rate) is added
+        only when the question did not name a metric; a second number is never free under this scorer."""
         name = product_name(win)
         tier = tier_phrase(win)
         term = term_text(win.term_months) if win.term_months and not has_term_words(name) else ""
         desc = " ".join(x for x in [term, name] if x)
         companion = None
-        if win.family in DEPOSIT and metric == "apy":
+        if metric_explicit:
+            pass
+        elif win.family in DEPOSIT and metric == "apy":
             companion = self.companion(sid, win, "dividend_rate")
         elif win.family in DEPOSIT and metric == "dividend_rate":
             companion = self.companion(sid, win, "apy")
@@ -274,9 +302,8 @@ class FactAnswers(AnswerBase):
     def _list_cards(self, sid: str) -> Draft:
         """Personal and business cards together, intro offers left out."""
         by: Dict[str, List[Fact]] = defaultdict(list)
-        for f in self.facts(sid, "credit_card"):
-            if f.metric == "apr" and not f.intro:
-                by[f.product].append(f)
+        for f in self.authoritative_only([f for f in self.facts(sid, "credit_card") if f.metric == "apr" and not f.intro]):
+            by[f.product].append(f)
         parts, used = [], []
         for product in sorted(by, key=lambda p: (p.startswith("Business"), p)):
             win, agree, _ = self.resolve(by[product])
@@ -287,8 +314,8 @@ class FactAnswers(AnswerBase):
         return Draft(f"{self.org} offers " + "; ".join(parts) + ".", used, self.sources(used, 4))
 
     def _list_certificates(self, q, sid: str, fam: str) -> Draft:
-        fs = [f for f in self.facts(sid, fam) if f.metric == "apy" and f.business == bool(q.business)] or \
-             [f for f in self.facts(sid, fam) if f.metric == "apy"]
+        pool = self.authoritative_only([f for f in self.facts(sid, fam) if f.metric == "apy"])
+        fs = [f for f in pool if f.business == bool(q.business)] or pool
         if not fs:
             return Draft.refuse(REFUSE_RATE, thing=self.thing(q), org=self.org)
         tiers: Tiers = defaultdict(list)

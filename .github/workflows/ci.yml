@@ -25,8 +25,6 @@ jobs:
       - name: Unit tests
         run: python -m pytest
       - name: Harness self-test (synthetic site, conflicts gold)
-        env:
-          KS_DISABLE_LLM: "1"
         run: |
           python harness/run_eval.py --submission submission --snapshots harness/selftest/snapshots \
             --eval harness/selftest/eval.jsonl --conflicts-gold harness/selftest/conflicts_gold.json --out /tmp/selftest
