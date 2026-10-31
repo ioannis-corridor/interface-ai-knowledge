@@ -18,10 +18,11 @@ NO_RATE_FAMILIES = {"construction", "student_loan"}
 US_STATES = ("Iowa|Illinois|Wisconsin|Minnesota|Missouri|Nebraska|South Dakota|North Dakota|Kansas|Indiana|Michigan|"
              "Ohio|Kentucky|Arizona|Texas|California|Florida|New York|Colorado")
 
-REFUSE_RATE = "Dupaco's website doesn't list a rate for {thing}. Please contact a Dupaco lender for current terms."
-REFUSE_GENERIC = "I don't know; Dupaco's website doesn't say. Please contact Dupaco for help with that."
-REFUSE_BRANCH = "Dupaco's website doesn't list {what} for the {branch} branch. Please contact Dupaco or check the branch locator on the contact page."
-NOT_YET = "That product isn't listed on Dupaco's website as of that date. Please contact Dupaco for details."
+REFUSE_RATE = "The website doesn't list a rate for {thing}. Please contact {org} for current terms."
+REFUSE_FEE = "The website's fee schedule doesn't list a fee for {thing}. Please contact {org} to confirm."
+REFUSE_GENERIC = "I don't know; the website doesn't say. Please contact {org} for help with that."
+REFUSE_BRANCH = "The website doesn't list {what} for the {branch} branch. Please contact {org} or check the branch locator on the contact page."
+NOT_YET = "That product isn't listed on the website as of that date. Please contact {org} for details."
 
 
 class Source:
@@ -89,6 +90,7 @@ class Composer:
         self.store = store
         self.index = index
         self.pages = pages          # sid -> url -> {"title","links","class"}
+        self.org = "the credit union"
 
     # ------------------------------------------------------------------ helpers
     def _facts(self, sid: str, family: str, pred=None) -> List[Fact]:
@@ -134,7 +136,7 @@ class Composer:
             win = best_of(fs)
             if not win:
                 return None
-            return Draft(f"Dupaco's routing number is {win.value}.", [win], self._sources(fs))
+            return Draft(f"{self.org}'s routing number is {win.value}.", [win], self._sources(fs))
         if ent in ("branch_count", "employee_count", "member_count", "assets"):
             product = {"branch_count": "branch count", "employee_count": "employee count",
                        "member_count": "member count", "assets": "total assets"}[ent]
@@ -146,7 +148,7 @@ class Composer:
             noun = {"branch_count": "branch office locations", "employee_count": "employees",
                     "member_count": "members", "assets": "in assets"}[ent]
             lead = "more than " if ent in ("member_count", "assets") else ""
-            text = f"Dupaco has {lead}{win.value} {noun}, according to its most recent news release."
+            text = f"{self.org} has {lead}{win.value} {noun}, according to its most recent news release."
             others = sorted({f.value for f in fs if f.value != win.value})
             note = f"Older releases quote {', '.join(others[:4])}; the newest release is used." if others else None
             return Draft(text, same, self._sources(same, 3), conflict_note=note)
@@ -155,8 +157,8 @@ class Composer:
             if not fs:
                 return None
             win = max(fs, key=lambda f: (f.article_date or date.min, f.authority))
-            text = (f"Forbes has named Dupaco one of the best credit unions in its state; the most recent announcement "
-                    f"says this was the {win.value} time Forbes recognized Dupaco.")
+            text = (f"Forbes has named {self.org} one of the best credit unions in its state; the most recent announcement "
+                    f"says this was the {win.value} time Forbes recognized {self.org}.")
             return Draft(text, [win], self._sources([win]))
         if ent in ("hours_lobby", "hours_driveup"):
             kind = "lobby" if ent == "hours_lobby" else "drive-up"
@@ -164,7 +166,7 @@ class Composer:
             if q.branch:
                 mine = [f for f in fs if _branch_match(q.branch, f)]
                 if not mine:
-                    return Draft(REFUSE_BRANCH.format(what=f"{kind} hours", branch=q.branch), confident=False)
+                    return Draft(REFUSE_BRANCH.format(what=f"{kind} hours", branch=q.branch, org=self.org), confident=False)
                 win = max(mine, key=lambda f: (f.article_date or date.min, f.authority))
                 return Draft(f"{q.branch} branch {kind} hours: {win.value}.", [win], self._sources(mine, 2))
             if not fs:
@@ -200,7 +202,7 @@ class Composer:
                 return None
             mine = [f for f in fs if _branch_match(q.branch, f)]
             if not mine:
-                return Draft(REFUSE_BRANCH.format(what="an address", branch=q.branch), confident=False)
+                return Draft(REFUSE_BRANCH.format(what="an address", branch=q.branch, org=self.org), confident=False)
             win = max(mine, key=lambda f: (f.authority, f.article_date or date.min, len(f.value)))
             urls = self._sources(mine, 2)
             contact = _pick_url(self.pages.get(sid, {}), ["/contact"])
@@ -212,8 +214,8 @@ class Composer:
             mine = [f for f in fs if q.branch and _branch_match(q.branch, f)] if q.branch else []
             if not mine:
                 if q.branch:
-                    return Draft(f"Dupaco's website doesn't mention a closing for the {q.branch} branch. "
-                                 f"Please contact Dupaco to confirm.", confident=False)
+                    return Draft(f"The website doesn't mention a closing for the {q.branch} branch. "
+                                 f"Please contact {self.org} to confirm.", confident=False)
                 return None
             win = max(mine, key=lambda f: (f.article_date or date.min, f.authority))
             from .text import parse_long_date
@@ -253,9 +255,9 @@ class Composer:
         states = re.search(rf"((?:{US_STATES}),?\s+(?:and\s+)?(?:{US_STATES}),?\s+(?:and\s+)?(?:{US_STATES})(?:,?\s+(?:and\s+)?(?:{US_STATES}))*)", text)
         parts = []
         if bullets:
-            parts.append("You're eligible to join Dupaco if " + "; or ".join(b[0].lower() + b[1:] for b in bullets) + ".")
+            parts.append(f"You're eligible to join {self.org} if " + "; or ".join(b[0].lower() + b[1:] for b in bullets) + ".")
         if states:
-            parts.append(f"Dupaco's charter area covers counties in {states.group(1).strip()}.")
+            parts.append(f"{self.org}'s charter area covers counties in {states.group(1).strip()}.")
         if not parts:
             return None
         return Draft(" ".join(parts), urls=[(url, tail[:200])])
@@ -275,7 +277,7 @@ class Composer:
         if shine:
             bits[0] += " (use the Contact Us tab for account-specific requests)"
         if phone:
-            bits.append(f"or by calling Dupaco at {phone.group(0)}")
+            bits.append(f"or by calling {self.org} at {phone.group(0)}")
         return Draft(", ".join(bits) + ".", urls=[(contact, (shine.group(1) if shine else text[:160]))])
 
     def _closure_alternatives(self, sid: str, f: Fact) -> Optional[str]:
@@ -361,14 +363,16 @@ class Composer:
     def answer_fact(self, q, sid: str, exact: bool) -> Draft:
         fam = q.family
         thing = _thing(q)
+        if fam == "fee":
+            return self.answer_fee(q, sid)
         if fam in NO_RATE_FAMILIES or fam is None:
-            return Draft(REFUSE_RATE.format(thing=thing), confident=False)
+            return Draft(REFUSE_RATE.format(thing=thing, org=self.org), confident=False)
         cands, metric = self._candidates(q, sid)
         if not cands:
             latest_c, _ = self._candidates(q, self.store.latest) if sid != self.store.latest else ([], None)
             if latest_c:
-                return Draft(NOT_YET, confident=False)
-            return Draft(REFUSE_RATE.format(thing=thing), confident=False)
+                return Draft(NOT_YET.format(org=self.org), confident=False)
+            return Draft(REFUSE_RATE.format(thing=thing, org=self.org), confident=False)
         tiers: Dict[tuple, List[Fact]] = defaultdict(list)
         for f in cands:
             tiers[f.soft_key()].append(f)
@@ -480,14 +484,14 @@ class Composer:
                 parts.append(f"{p}: {win.value} APR" + (" (variable)" if win.business else ""))
                 used += agree
             if not parts:
-                return Draft(REFUSE_RATE.format(thing="credit cards"), confident=False)
-            return Draft("Dupaco offers " + "; ".join(parts) + ".", used, self._sources(used, 4))
+                return Draft(REFUSE_RATE.format(thing="credit cards", org=self.org), confident=False)
+            return Draft(f"{self.org} offers " + "; ".join(parts) + ".", used, self._sources(used, 4))
         if fam in ("certificate", "ira"):
             fs = [f for f in self._facts(sid, fam) if f.metric == "apy" and f.business == bool(q.business)]
             if not fs:
                 fs = [f for f in self._facts(sid, fam) if f.metric == "apy"]
             if not fs:
-                return Draft(REFUSE_RATE.format(thing=_thing(q)), confident=False)
+                return Draft(REFUSE_RATE.format(thing=_thing(q), org=self.org), confident=False)
             tiers: Dict[tuple, List[Fact]] = defaultdict(list)
             for f in fs:
                 tiers[f.soft_key()].append(f)
@@ -508,11 +512,59 @@ class Composer:
             return Draft(f"{head}: " + ". ".join(parts) + ".", used, self._sources(used, 3))
         cands, metric = self._candidates(q, sid)
         if not cands:
-            return Draft(REFUSE_RATE.format(thing=_thing(q)), confident=False)
+            return Draft(REFUSE_RATE.format(thing=_thing(q), org=self.org), confident=False)
         tiers: Dict[tuple, List[Fact]] = defaultdict(list)
         for f in cands:
             tiers[f.soft_key()].append(f)
         return self._multi(q, sid, tiers, metric)
+
+    # ------------------------------------------------------------------ fees
+    FEE_NOISE = {"fee", "cost", "charge", "price", "much", "pay", "account", "service", "member", "non-member",
+                 "per", "item", "each", "month", "what", "there", "any", "dupaco"}
+    FEE_SYNONYMS = {"lost": {"lost", "replacement", "replace", "reissue", "rush"}, "replacement": {"replacement", "replace", "reissue", "lost", "rush"},
+                    "wire": {"wire"}, "incoming": {"incoming", "inbound"}, "outgoing": {"outgoing", "domestic", "outbound"},
+                    "overdraft": {"overdraft", "nsf", "insufficient"}, "bounced": {"overdraft", "nsf", "returned"},
+                    "cashier": {"official", "cashier", "certified"}, "check": {"check", "draft"}, "atm": {"atm"},
+                    "foreign": {"foreign", "international"}, "international": {"international", "foreign"},
+                    "stop": {"stop"}, "payment": {"payment"}, "money": {"money"}, "order": {"order"},
+                    "notary": {"notary"}, "box": {"box"}, "safe": {"safe"}, "deposit": {"deposit"},
+                    "statement": {"statement"}, "copy": {"copy"}, "research": {"research"}, "debit": {"debit"},
+                    "card": {"card"}, "coin": {"coin"}, "garnishment": {"garnishment"}, "levy": {"levy"},
+                    "inactive": {"inactive", "dormant"}, "dormant": {"inactive", "dormant"}, "closing": {"closed", "closing"},
+                    "closed": {"closed", "closing"}, "early": {"prior", "early"}}
+
+    def answer_fee(self, q, sid: str) -> Draft:
+        fees = self._facts(sid, "fee")
+        thing = q.raw.strip(" ?.")
+        for _ in range(6):
+            thing = re.sub(r"^(what's|what|how much|is|are|the|a|an|does|do|you|charge|for|cost|of|fee|fees|there|it|much|will)\b\s*", "", thing, flags=re.I)
+        thing = thing or "that"
+        if not fees:
+            return Draft(REFUSE_FEE.format(thing=thing, org=self.org), confident=False)
+        keys = [t for t in q.tokens if t not in self.FEE_NOISE and not t.isdigit()]
+        if not keys:
+            return Draft(REFUSE_FEE.format(thing=thing, org=self.org), confident=False)
+        scored = []
+        for f in fees:
+            ltoks = set(tokenize(f.product))
+            covered = 0
+            for k in keys:
+                alts = self.FEE_SYNONYMS.get(k, {k})
+                if alts & ltoks:
+                    covered += 1
+            if covered == len(keys):
+                extra = len(ltoks - {t for k in keys for t in self.FEE_SYNONYMS.get(k, {k})})
+                scored.append((-extra, f.authority, f))
+        if not scored:
+            return Draft(REFUSE_FEE.format(thing=thing, org=self.org), confident=False)
+        scored.sort(key=lambda t: (t[0], t[1]), reverse=True)
+        win = scored[0][2]
+        same = [f for f in fees if f.product == win.product]
+        win, agree, note = self._resolve(same)
+        text = f"The fee for {win.product[0].lower() + win.product[1:]} is {win.value}."
+        if win.value.lower().startswith(("free", "no charge")):
+            text = f"{win.product} is free of charge."
+        return Draft(_tidy(text), agree, self._sources(agree, 2), conflict_note=note)
 
     # ------------------------------------------------------------------ verify / change
     def answer_verify(self, q, sid: str) -> Draft:
@@ -588,11 +640,11 @@ class Composer:
                         counts[l.split("?")[0].rstrip("/") + "/"] += 1
             if counts:
                 target = counts.most_common(1)[0][0]
-                return Draft(f"You can join Dupaco online at {target}", urls=[(target, "")])
+                return Draft(f"You can join {self.org} online at {target}", urls=[(target, "")])
         if re.search(r"locator|branch|atm|location|contact|phone", low):
             u = _pick_url(pages, ["/contact"])
             if u:
-                return Draft(f"Dupaco's branch and ATM locator is on the contact page: {u}", urls=[(u, "")])
+                return Draft(f"{self.org}'s branch and ATM locator is on the contact page: {u}", urls=[(u, "")])
         targets = {
             "certificate": ["/personal/savings-account", "/rates"], "savings": ["/personal/savings-account", "/rates"],
             "money_market": ["/personal/savings-account", "/rates"], "hsa": ["/personal/savings-account", "/rates"],
@@ -612,29 +664,30 @@ class Composer:
                 u = _pick_url(pages, targets[fam])
             if u:
                 frag = "#rates" if re.search(r"\brates?\b|apy|apr", low) and "/rates" not in u else ""
-                return Draft(f"You can find that on Dupaco's website at {u}{frag}", urls=[(u, "")])
+                return Draft(f"You can find that on the website at {u}{frag}", urls=[(u, "")])
         if re.search(r"\brates?\b", low):
             u = _pick_url(pages, ["/rates"])
             if u:
-                return Draft(f"Dupaco's rates page is {u}", urls=[(u, "")])
-        hits = self.index.search(q.tokens, sid, k=5, url_filter=lambda u: pages.get(u, {}).get("class", 0) >= 60)
+                return Draft(f"The rates page is {u}", urls=[(u, "")])
+        hits = self.index.search(q.tokens, sid, k=5, url_filter=lambda u: pages.get(u, {}).get("class", 0) >= 60,
+                                 url_source=self.store.url_source(sid))
         if hits:
             u = hits[0][2]
-            return Draft(f"The relevant page on Dupaco's website is {u}", urls=[(u, hits[0][1].text[:160])])
-        return Draft(REFUSE_GENERIC, confident=False)
+            return Draft(f"The relevant page is {u}", urls=[(u, hits[0][1].text[:160])])
+        return Draft(REFUSE_GENERIC.format(org=self.org), confident=False)
 
     # ------------------------------------------------------------------ free text
     def answer_free(self, q, sid: str) -> Draft:
         toks = q.tokens
         if not toks:
-            return Draft(REFUSE_GENERIC, confident=False)
+            return Draft(REFUSE_GENERIC.format(org=self.org), confident=False)
         pages = self.pages.get(sid, {})
-        hits = self.index.search(toks, sid, k=12)
+        hits = self.index.search(toks, sid, k=12, url_source=self.store.url_source(sid))
         hits = [h for h in hits if pages.get(h[2], {}).get("class", 0) > OTHER]
         if not hits:
-            return Draft(REFUSE_GENERIC, confident=False)
+            return Draft(REFUSE_GENERIC.format(org=self.org), confident=False)
         if hits[0][0] < 4.0:
-            return Draft(REFUSE_GENERIC, confident=False)
+            return Draft(REFUSE_GENERIC.format(org=self.org), confident=False)
         qset = set(toks)
         # A page whose URL slug names what the question asks about beats a page that merely mentions it.
         def slug_boost(h):
@@ -697,9 +750,11 @@ class Composer:
             if d:
                 return d
             if q.entity in ("hours_lobby", "hours_driveup", "address", "closure") and q.branch:
-                return Draft(REFUSE_BRANCH.format(what="that information", branch=q.branch), confident=False)
+                return Draft(REFUSE_BRANCH.format(what="that information", branch=q.branch, org=self.org), confident=False)
         if q.intent == "link":
             return self.answer_link(q, sid)
+        if q.intent == "fee":
+            return self.answer_fee(q, sid)
         if q.intent == "list" and q.family:
             return self.answer_list(q, sid)
         if q.intent == "verify" and q.family and q.pct_value is not None:
