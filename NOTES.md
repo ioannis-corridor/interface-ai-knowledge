@@ -88,6 +88,15 @@ questions that use it.
 | Harness self-test fixture (synthetic site, conflicts gold) | 1.0 |
 | Private paraphrase, as-of and change set (35 questions, not committed) | 1.0 |
 
+## Code quality
+
+- `ruff check submission tests` passes with the rule set in `pyproject.toml`.
+- 53 tests on synthetic fixtures cover table parsing, prose extraction, the query parser, the store and index,
+  conflicts, the LLM merge (stubbed client), every answer handler, and two-snapshot end-to-end flows. Line
+  coverage is 86%.
+- CI runs lint, tests and the harness self-test on Python 3.9, 3.11 and 3.12.
+- `answer()` never raises: a handler bug is logged and turns into a digit-free refusal.
+
 ## Limits
 
 - Branch hours exist only in press releases about branch openings, so the general lobby-hours answer lists

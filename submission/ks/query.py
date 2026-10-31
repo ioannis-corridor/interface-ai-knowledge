@@ -74,6 +74,14 @@ PCT_IN_Q_RE = re.compile(r"(\d+(?:\.\d+)?)\s*%")
 MONEY_IN_Q_RE = re.compile(r"\$\s?(\d[\d,]*(?:\.\d+)?)(k)?\b", re.I)
 
 
+DEPOSIT_FAMILIES = {"certificate", "ira", "savings", "money_market", "hsa", "checking"}
+PRODUCT_FAMILY = {"Investor's Choice Money Market": "money_market", "Health Savings Account": "hsa",
+                  "1st Rate Checking": "checking", "Free Checking": "checking", "Share Savings": "savings",
+                  "Bright Savings": "savings", "You Name It Savings": "savings", "Holiday Club Savings": "savings",
+                  "Launchpad Savings": "savings", "High-Yield Savings": "savings", "Platinum Visa": "credit_card",
+                  "Rewards Visa": "credit_card", "Business Platinum Visa": "credit_card", "Business Rewards Visa": "credit_card"}
+
+
 @dataclass
 class Query:
     raw: str
@@ -188,7 +196,16 @@ def parse_rules(question: str, drop_tokens: FrozenSet[str] = frozenset()) -> Que
     low = " " + re.sub(r"\s+", " ", text.lower()) + " "
     q.tokens = [t for t in tokenize(REPEAT_RE.sub(" ", text)) if t not in drop_tokens]
     q.as_of_text = _parse_as_of(text)
+    _detect_entity(q, text, low)
+    _detect_family_and_product(q, low)
+    _detect_metric(q, low)
+    _detect_qualifiers(q, text, low)
+    _detect_fee(q, low)
+    q.intent = _detect_intent(q, text, low)
+    return q
 
+
+def _detect_entity(q: Query, text: str, low: str) -> None:
     q.entity = _detect(ENTITY_PATTERNS, low)
     if q.entity == "closure" and not re.search(r"\b(branch|location|office|lobby|store|atm)\b", low):
         q.entity = None                      # closing an account, not a branch
@@ -200,31 +217,27 @@ def parse_rules(question: str, drop_tokens: FrozenSet[str] = frozenset()) -> Que
     if q.entity == "eligibility" and ACTION_RE.search(text):
         q.entity = None
     q.branch = _branch(text)
-    if q.entity == "address" and not q.branch:
-        q.entity = None if not re.search(r"\bbranch|office|location", low) else q.entity
+    if q.entity == "address" and not q.branch and not re.search(r"\bbranch|office|location", low):
+        q.entity = None
 
-    q.family = _detect(FAMILY_PATTERNS, low)
-    q.family_weak = False
-    if q.family and q.family.endswith("?"):
-        q.family, q.family_weak = q.family[:-1], True
-    if q.entity and q.entity not in ("forbes",) and q.family in ("credit_card", "savings", "checking") and \
+
+def _detect_family_and_product(q: Query, low: str) -> None:
+    fam = _detect(FAMILY_PATTERNS, low)
+    if fam and fam.endswith("?"):            # matched only a generic word such as "card"
+        fam, q.family_weak = fam[:-1], True
+    q.family = fam
+    if q.entity and q.entity != "forbes" and q.family in ("credit_card", "savings", "checking") and \
             re.search(r"hours|address|routing|branch", low):
-        q.family = None
+        q.family = None                      # "savings" in "branch hours for the savings center" is noise
     for pat, name in PRODUCT_PATTERNS:
         if re.search(pat, low):
             q.product = name
             break
-    if q.product and q.product.endswith("Savings") and q.family in (None, "savings"):
-        q.family = "savings"
-    if q.product == "Investor's Choice Money Market":
-        q.family = "money_market"
-    if q.product == "Health Savings Account":
-        q.family = "hsa"
-    if q.product and "Checking" in q.product:
-        q.family = "checking"
-    if q.product and "Visa" in q.product:
-        q.family = "credit_card"
+    if q.product:
+        q.family = PRODUCT_FAMILY.get(q.product, q.family)
 
+
+def _detect_metric(q: Query, low: str) -> None:
     if re.search(r"\bapy\b|yield", low):
         q.metric = "apy"
     elif re.search(r"dividend rate", low):
@@ -233,25 +246,27 @@ def parse_rules(question: str, drop_tokens: FrozenSet[str] = frozenset()) -> Que
         q.metric = "apr"
     elif re.search(r"\brates?\b|interest|percent|pay|earn|how much", low):
         q.metric = "rate"
-    if q.metric == "rate" and q.family:
-        q.metric = "apy" if q.family in ("certificate", "ira", "savings", "money_market", "hsa", "checking") else \
-            ("rate" if q.family == "mortgage" else "apr")
+    if q.metric == "rate" and q.family:      # "rate" means APY for deposits and APR for loans
+        q.metric = "apy" if q.family in DEPOSIT_FAMILIES else ("rate" if q.family == "mortgage" else "apr")
 
+
+def _detect_qualifiers(q: Query, text: str, low: str) -> None:
     q.term_months = _parse_term(text)
     q.model_year = _parse_model_year(text) if q.family in ("auto", "atv", "boat_rv", None) else None
     money = _parse_money(text)
     if money is not None:
-        if q.family in ("savings", "money_market", "hsa", "checking", "ira"):
+        if q.family in DEPOSIT_FAMILIES:
             q.balance = money
         elif q.family in ("mortgage", "home_improvement", "boat_rv", "auto", "personal_loan"):
             q.amount = money
+    certificate_like = q.family in ("certificate", "ira")
     if re.search(r"\bjumbo\b", low):
         q.jumbo = True
-    elif re.search(r"\b(regular|standard|non[- ]jumbo)\b", low) and q.family in ("certificate", "ira"):
+    elif certificate_like and re.search(r"\b(regular|standard|non[- ]jumbo)\b", low):
         q.jumbo = False
     if re.search(r"\bspecial\b", low):
         q.special = True
-    elif re.search(r"\bregular\b", low) and q.family in ("certificate", "ira"):
+    elif certificate_like and re.search(r"\bregular\b", low):
         q.special = False
     if re.search(r"\broth\b", low):
         q.ira_type = "roth"
@@ -259,11 +274,11 @@ def parse_rules(question: str, drop_tokens: FrozenSet[str] = frozenset()) -> Que
         q.ira_type = "traditional"
     if re.search(r"refinanc", low):
         q.purpose = "refinance"
-    elif re.search(r"\bpurchase\b|\bbuy\b|buying", low) and q.family == "mortgage":
+    elif q.family == "mortgage" and re.search(r"\bpurchase\b|\bbuy\b|buying", low):
         q.purpose = "purchase"
     if re.search(r"intro(?:ductory)?|balance transfer", low):
         q.intro = True
-    elif re.search(r"standard|purchase apr|regular apr|ongoing", low) and q.family == "credit_card":
+    elif q.family == "credit_card" and re.search(r"standard|purchase apr|regular apr|ongoing", low):
         q.intro = False
     if re.search(r"\bbusiness\b|commercial", low):
         q.business = True
@@ -272,43 +287,56 @@ def parse_rules(question: str, drop_tokens: FrozenSet[str] = frozenset()) -> Que
     m = PCT_IN_Q_RE.search(text)
     if m:
         q.pct_value = float(m.group(1))
+    # "minimum balance to earn the top rate" asks for the top rate, not the minimum one
     sup_text = re.sub(r"\b(minimum|lowest|smallest|least)\s+(balance|deposit|amount|opening|to open|to earn|required)", " ", low)
     sups = [m.group(1) for m in SUPERLATIVE_RE.finditer(sup_text)]
     if sups:
         q.superlative = "min" if all(w in ("lowest", "minimum", "cheapest", "least") for w in sups) else "max"
-    fee_q = bool(FEE_RE.search(low)) and not re.search(r"\b(apy|apr|dividend|interest rate|yield)\b", low)
-    if fee_q and (q.family is None or q.family_weak or q.family == "credit_card" and re.search(r"debit|replace|lost|rush", low)):
-        q.family, q.family_weak = "fee", False
-        q.metric = "fee"
 
-    # ---- intent
+
+def _detect_fee(q: Query, low: str) -> None:
+    if not FEE_RE.search(low) or re.search(r"\b(apy|apr|dividend|interest rate|yield)\b", low):
+        return
+    card_fee = q.family == "credit_card" and re.search(r"debit|replace|lost|rush", low)
+    if q.family is None or q.family_weak or card_fee:
+        q.family, q.family_weak, q.metric = "fee", False, "fee"
+
+
+def _is_list_question(q: Query, text: str, low: str) -> bool:
+    if not q.family or q.term_months or q.product:
+        return False
+    if LIST_RE.search(text) and q.balance is None and q.model_year is None:
+        return True
+    # "certificate rates" / "credit card rates" with no term or card named: read them all back
+    return q.family in ("certificate", "credit_card") and q.jumbo is None and q.special is None and q.ira_type is None \
+        and bool(re.search(r"\brates?\b|\bapr|\bapy|offer|options|available", low)) \
+        and not re.search(r"\b(highest|lowest)\b", low)
+
+
+def _detect_intent(q: Query, text: str, low: str) -> str:
     if q.family == "fee" and not q.entity:
-        q.intent = "fee"
-    elif LINK_RE.search(text) or ACTION_RE.search(text):
-        q.intent = "link"
-    elif q.entity == "closure" or (q.entity == "hours_lobby" and q.branch and re.search(r"still open|open today", low)):
-        q.intent = "status"
-    elif q.entity in ("hours_lobby", "hours_driveup") and AGGREGATE_RE.search(text):
-        q.intent = "aggregate"
-    elif q.entity:
-        q.intent = "fact"
-    elif CHANGE_RE.search(text) and q.family and not q.as_of_text:
-        q.intent = "change"
-    elif q.pct_value is not None and q.family and VERIFY_RE.match(text):
-        q.intent = "verify"
-    elif q.superlative and q.family:
-        q.intent = "superlative"
-    elif q.family and LIST_RE.search(text) and not q.term_months and not q.product and q.balance is None and q.model_year is None or q.family in ("certificate", "credit_card") and not q.term_months and not q.product and q.jumbo is None \
-            and q.special is None and q.ira_type is None and re.search(r"\brates?\b|\bapr|\bapy|offer|options|available", low) \
-            and not re.search(r"\b(highest|lowest)\b", low):
-        q.intent = "list"
-    elif q.family and q.metric:
-        q.intent = "fact"
-    elif q.family:
-        q.intent = "fact" if (q.term_months or q.product or q.model_year or q.balance is not None) else "free"
-    else:
-        q.intent = "free"
-    return q
+        return "fee"
+    if LINK_RE.search(text) or ACTION_RE.search(text):
+        return "link"
+    if q.entity == "closure" or (q.entity == "hours_lobby" and q.branch and re.search(r"still open|open today", low)):
+        return "status"
+    if q.entity in ("hours_lobby", "hours_driveup") and AGGREGATE_RE.search(text):
+        return "aggregate"
+    if q.entity:
+        return "fact"
+    if CHANGE_RE.search(text) and q.family and not q.as_of_text:
+        return "change"
+    if q.pct_value is not None and q.family and VERIFY_RE.match(text):
+        return "verify"
+    if q.superlative and q.family:
+        return "superlative"
+    if _is_list_question(q, text, low):
+        return "list"
+    if q.family and q.metric:
+        return "fact"
+    if q.family and (q.term_months or q.product or q.model_year or q.balance is not None):
+        return "fact"
+    return "free"
 
 
 def needs_llm(q: Query) -> bool:
