@@ -136,6 +136,8 @@ class KnowledgeSystem:
 
     # ------------------------------------------------------------------ conflicts
     def conflicts(self):
+        if not self.store.snapshots:
+            return []
         if self._conflicts is None:
             entries = find_conflicts(self.store)
             self._conflicts = [
