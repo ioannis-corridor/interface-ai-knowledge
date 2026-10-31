@@ -6,6 +6,7 @@ from collections import defaultdict
 from datetime import date
 from typing import Dict, List
 
+from .format import product_name, term_text, tier_phrase
 from .model import FAMILY_NAMES, Fact
 from .pages import url_key
 from .store import FactStore, best_of
@@ -15,18 +16,17 @@ ENTITY_TOPICS = {"branch count", "forbes recognition", "routing number", "employ
 
 
 def _topic(f: Fact, drop_tier: bool = False) -> str:
-    from .answer import _product_name, _term_text, _tier_phrase
     if f.family == "entity":
         return f.label or f.product
     metric = {"apy": "APY", "dividend_rate": "dividend rate", "apr": "APR", "rate": "rate"}.get(f.metric, f.metric)
     fam = FAMILY_NAMES.get(f.family, f.family)
-    name = _product_name(f)
+    name = product_name(f)
     if f.family in ("auto", "atv", "boat_rv"):
         name = ""
     if f.family == "mortgage":
         name = re.sub(r"\s*\$[\d,]+ or less", "", name)
-    term = _term_text(f.term_months) if f.term_months and not re.search(r"month|year", name, re.I) else ""
-    tier = "" if drop_tier else _tier_phrase(f)
+    term = term_text(f.term_months) if f.term_months and not re.search(r"month|year", name, re.I) else ""
+    tier = "" if drop_tier else tier_phrase(f)
     bits = ["business" if f.business else "", fam if fam.lower() not in name.lower() else "", term, name,
             f"({tier})" if tier else ("(all tiers)" if drop_tier else ""), metric]
     return " ".join(b for b in bits if b)
@@ -34,7 +34,7 @@ def _topic(f: Fact, drop_tier: bool = False) -> str:
 
 def _why(win: Fact, losers: List[Fact], cross: bool) -> str:
     wk = url_key(win.url)
-    pages = sorted({url_key(l.url) for l in losers})
+    pages = sorted({url_key(f.url) for f in losers})
     cls = "rate page" if win.authority >= 100 else "product page" if win.authority >= 85 else "newest release"
     eff = f" effective {win.effective.strftime('%m/%d/%Y')}" if win.effective else ""
     if cross:
@@ -63,7 +63,7 @@ def find_conflicts(store: FactStore) -> List[dict]:
     groups: Dict[tuple, List[Fact]] = defaultdict(list)
     for f in store.facts[latest]:
         if f.metric in ("apy", "apr", "rate", "dividend_rate") or f.family == "entity":
-            groups[_group_key(f)].append(f)
+            groups[f.group_key()].append(f)
     for key, fs in groups.items():
         values = {f.value for f in fs}
         if len(values) < 2:
@@ -83,7 +83,7 @@ def find_conflicts(store: FactStore) -> List[dict]:
     for sid, _ in store.snapshots:
         for f in store.facts[sid]:
             if f.metric in ("apy", "apr", "rate") and f.authority >= 85 and not f.business:
-                hist[_group_key(f)][sid].append(f)
+                hist[f.group_key()][sid].append(f)
     for key, by_sid in hist.items():
         if key in seen_keys or latest not in by_sid:
             continue
@@ -106,14 +106,6 @@ def find_conflicts(store: FactStore) -> List[dict]:
         seen_topics.add(t)
         dedup.append(e)
     return dedup[:MAX_CONFLICTS]
-
-
-def _group_key(f: Fact) -> tuple:
-    """Like soft_key but tier labels that drift over time (model years) collapse by term."""
-    k = list(f.soft_key())
-    if f.family in ("auto", "atv") and f.model_years:
-        k[5] = "newest" if f.model_years[1] >= 2026 else f.model_years
-    return tuple(k)
 
 
 def _tierless(key: tuple) -> tuple:
@@ -145,13 +137,12 @@ def _merge_tiers(entries: List[dict]) -> List[dict]:
                 if k not in seen and len(sources) < 8:
                     seen.add(k)
                     sources.append(s)
-        from .answer import _tier_phrase
         per_tier, seen_res = [], set()
         for e in sorted(es, key=lambda e: -(e["win"].amount or e["win"].balance or (0, 0))[1]):
             if e["resolution"] in seen_res:
                 continue
             seen_res.add(e["resolution"])
-            tier = _tier_phrase(e["win"])
+            tier = tier_phrase(e["win"])
             per_tier.append(f"{e['resolution']} ({tier})" if tier and len(es) > 1 else e["resolution"])
         resolution = base["resolution"] if len(per_tier) == 1 else "; ".join(per_tier)
         merged.append({**base, "topic": _topic(base["win"], drop_tier=True), "values": values, "sources": sources,

@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from datetime import date
-from typing import List, Optional
+from typing import FrozenSet, List, Optional
 
 from .text import MONTHS, tokenize
 
@@ -97,14 +97,8 @@ class Query:
     as_of_text: Optional[date] = None
     superlative: Optional[str] = None   # max | min
     tokens: List[str] = field(default_factory=list)
-    confidence: float = 1.0
     family_weak: bool = False      # family came from a generic word such as "card"
     from_llm: bool = False         # routing came from the LLM parser; a failed lookup falls back to free text
-
-    def to_dict(self) -> dict:
-        d = asdict(self)
-        d["as_of_text"] = self.as_of_text.isoformat() if self.as_of_text else None
-        return d
 
 
 def _detect(patterns, text: str) -> Optional[str]:
@@ -187,11 +181,12 @@ def _branch(text: str) -> Optional[str]:
     return None
 
 
-def parse_rules(question: str) -> Query:
+def parse_rules(question: str, drop_tokens: FrozenSet[str] = frozenset()) -> Query:
+    """Deterministic question parser. `drop_tokens` holds the institution's own name, which carries no meaning."""
     q = Query(raw=question)
     text = question.strip()
     low = " " + re.sub(r"\s+", " ", text.lower()) + " "
-    q.tokens = tokenize(REPEAT_RE.sub(" ", text))
+    q.tokens = [t for t in tokenize(REPEAT_RE.sub(" ", text)) if t not in drop_tokens]
     q.as_of_text = _parse_as_of(text)
 
     q.entity = _detect(ENTITY_PATTERNS, low)
@@ -303,9 +298,7 @@ def parse_rules(question: str) -> Query:
         q.intent = "verify"
     elif q.superlative and q.family:
         q.intent = "superlative"
-    elif q.family and LIST_RE.search(text) and not q.term_months and not q.product and q.balance is None and q.model_year is None:
-        q.intent = "list"
-    elif q.family in ("certificate", "credit_card") and not q.term_months and not q.product and q.jumbo is None \
+    elif q.family and LIST_RE.search(text) and not q.term_months and not q.product and q.balance is None and q.model_year is None or q.family in ("certificate", "credit_card") and not q.term_months and not q.product and q.jumbo is None \
             and q.special is None and q.ira_type is None and re.search(r"\brates?\b|\bapr|\bapy|offer|options|available", low) \
             and not re.search(r"\b(highest|lowest)\b", low):
         q.intent = "list"
@@ -315,7 +308,6 @@ def parse_rules(question: str) -> Query:
         q.intent = "fact" if (q.term_months or q.product or q.model_year or q.balance is not None) else "free"
     else:
         q.intent = "free"
-    q.confidence = 1.0 if (q.family or q.entity or q.intent == "link") else 0.4
     return q
 
 

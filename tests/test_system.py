@@ -1,5 +1,6 @@
 """End-to-end behaviour on a tiny synthetic site: current value, as_of, stale copy, refusal, conflicts."""
 import contract
+
 from ks.system import KnowledgeSystem
 from ks.text import numbers_in
 

@@ -1,16 +1,12 @@
 """Data model: one Fact is one value for one (product, qualifiers, metric) on one page in one snapshot."""
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Optional, Tuple
 
 INF = float("inf")
-
-METRIC_NAMES = {
-    "apy": "APY", "dividend_rate": "dividend rate", "apr": "APR", "rate": "rate", "points": "points",
-    "min_open": "minimum to open", "min_earn": "minimum to earn", "payment": "payment example",
-}
 
 FAMILY_NAMES = {
     "certificate": "certificate", "ira": "IRA", "savings": "savings account", "money_market": "money market",
@@ -48,24 +44,21 @@ class Fact:
     extra: dict = field(default_factory=dict)
 
     def soft_key(self) -> tuple:
-        """Identity used for conflict detection: same product + qualifiers + metric, tier labels normalised."""
+        """Identity of one fact: product + every qualifier + metric. Two facts with the same soft key but
+        different values are a contradiction; different soft keys are different tiers."""
         return (
-            self.family, self.business, _norm_product(self.product, self.family), self.metric, self.term_months,
+            self.family, self.business, _norm_product(self.product), self.metric, self.term_months,
             self.model_years, self.balance, self.amount, self.jumbo, self.special, self.ira_type, self.purpose,
             self.intro,
         )
 
-    def tier_text(self) -> str:
-        from .text import range_text
-        bits = []
-        if self.model_years:
-            lo, hi = self.model_years
-            bits.append(f"{lo}-{hi} model years" if lo else f"{hi} and older model years")
-        if self.balance:
-            bits.append("balances " + range_text(*self.balance))
-        if self.amount:
-            bits.append("loan amounts " + range_text(*self.amount))
-        return ", ".join(bits)
+    def group_key(self) -> tuple:
+        """soft_key with tier labels that drift between crawls collapsed: the newest model-year tier of an auto
+        table is the same fact whether it is labelled 2023-26 or 2024-27."""
+        k = list(self.soft_key())
+        if self.family in ("auto", "atv") and self.model_years:
+            k[5] = "newest" if self.model_years[1] >= 2026 else self.model_years
+        return tuple(k)
 
 
 PRODUCT_ALIASES = [
@@ -83,7 +76,6 @@ PRODUCT_ALIASES = [
 
 def canonical_product(product: str, family: str) -> str:
     """Map the many spellings of one product ("Investor's Choice", "Investor’s Choice Money Market") to one name."""
-    import re
     low = (product or "").lower()
     if family in ("savings", "money_market", "hsa", "checking", "credit_card", "heloc"):
         for pat, name in PRODUCT_ALIASES:
@@ -94,8 +86,7 @@ def canonical_product(product: str, family: str) -> str:
     return product
 
 
-def _norm_product(product: str, family: str) -> str:
-    import re
+def _norm_product(product: str) -> str:
     p = (product or "").lower()
     p = re.sub(r"\b\d+\s*[- ]?\s*(month|months|mo|year|years)\b", " ", p)
     p = re.sub(r"\b(roth|traditional)\s*:?", " ", p)

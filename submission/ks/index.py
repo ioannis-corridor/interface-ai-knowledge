@@ -6,7 +6,7 @@ import math
 import re
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Callable, Dict, List, Optional, Set, Tuple
 
 from .text import strip_markdown, tokenize
 
@@ -45,8 +45,8 @@ def split_chunks(markdown: str) -> List[Tuple[str, str, bool]]:
             j = i
             while j < len(lines) and lines[j].strip().startswith("|"):
                 j += 1
-            label = next((strip_markdown(l) for l in reversed(lines[max(0, i - 12):i])
-                          if l.strip() and not l.strip().startswith(("|", "![", "[", "-")) and len(l) < 80), "")
+            label = next((strip_markdown(ln) for ln in reversed(lines[max(0, i - 12):i])
+                          if ln.strip() and not ln.strip().startswith(("|", "![", "[", "-")) and len(ln) < 80), "")
             rows = [strip_markdown(r.strip().strip("|").replace("|", " ; ")) for r in lines[i:j] if not set(r.strip()) <= set("|-: ")]
             out.append((heading, (label + ": " if label else "") + " / ".join(rows), True))
             i = j
@@ -104,7 +104,7 @@ class ChunkIndex:
             self._dirty = False
 
     def search(self, query_tokens: List[str], snapshot_id: str, k: int = 12, k1: float = 1.4, b: float = 0.6,
-               url_filter: Optional[callable] = None, url_source: Optional[Dict[str, str]] = None
+               url_filter: Optional[Callable[[str], bool]] = None, url_source: Optional[Dict[str, str]] = None
                ) -> List[Tuple[float, Chunk, str]]:
         """-> [(score, chunk, best_url)] restricted to chunks current in `snapshot_id`.
 
