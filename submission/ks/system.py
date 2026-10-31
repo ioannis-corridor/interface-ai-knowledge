@@ -99,6 +99,8 @@ class KnowledgeSystem:
         return ans
 
     def _answer(self, question: str, as_of: Optional[str]):
+        if not self.store.snapshots:
+            return self.c.Answer(text="I don't know; no website snapshots have been loaded yet.", confident=False)
         q = parse_rules(question)
         if self.llm is not None and needs_llm(q):
             try:
