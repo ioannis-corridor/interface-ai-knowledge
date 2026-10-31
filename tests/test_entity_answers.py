@@ -22,7 +22,7 @@ Closed
 
 Example CU Branch
 
-1465 Birchwood St., Lakeview, IA, 52001
+1465 Maple St., Lakeview, IA, 50001
 """
 RELEASE_A = """
 2 min read
@@ -32,7 +32,7 @@ RELEASE_A = """
 # Example CU plans Riverside branch closure
 
 This location will close March 31, 2026. “Members who frequent the Riverside branch already can access the same
-services at full-service branches at Southgate and Birchwood Street,” said the CEO.
+services at full-service branches at Elm Street and Maple Avenue,” said the CEO.
 
 ABOUT EXAMPLE CU: It has nearly 450 employees and 18 branch office locations. It was the second time Forbes recognized Example CU.
 """
@@ -41,9 +41,9 @@ RELEASE_B = """
 
 [Jane Doe](https://x.test/newsroom/author/jane) May 05, 2026
 
-# Example CU celebrates a new Westfield branch
+# Example CU celebrates a new Hilltop branch
 
-The Westfield Example CU branch is located at 1100 E. Commerce Parkway. Branch hours are:
+The Hilltop Example CU branch is located at 1100 E. Commerce Parkway. Branch hours are:
 
 **Lobby**
 
@@ -64,9 +64,9 @@ RELEASE_C = """
 
 [Jane Doe](https://x.test/newsroom/author/jane) April 06, 2026
 
-# Example CU finishes the Grimes branch
+# Example CU finishes the Oakdale branch
 
-The Grimes Example CU branch is located at 200 Main St. Branch hours are:
+The Oakdale Example CU branch is located at 200 Main St. Branch hours are:
 
 **Lobby**
 
@@ -90,8 +90,8 @@ def build():
     ks = KnowledgeSystem(contract, use_llm=False)
     pages = [("https://x.test/contact", "Contact | Example CU", CONTACT),
              ("https://x.test/newsroom/riverside-closure", "Riverside closure | Example CU", RELEASE_A),
-             ("https://x.test/newsroom/westfield", "Westfield | Example CU", RELEASE_B),
-             ("https://x.test/newsroom/grimes", "Grimes | Example CU", RELEASE_C),
+             ("https://x.test/newsroom/hilltop", "Hilltop | Example CU", RELEASE_B),
+             ("https://x.test/newsroom/oakdale", "Oakdale | Example CU", RELEASE_C),
              ("https://x.test/about/join", "Join | Example CU", JOIN)]
     ks.ingest(contract.Snapshot("01_2026-09-28", "2026-09-28",
                                 [contract.Page(url=u, title=t, markdown=m, fetched_at="2026-09-28T00:00:00Z") for u, t, m in pages]))
@@ -108,14 +108,14 @@ def test_newest_release_wins_for_counts_and_awards():
 
 def test_hours_specific_general_and_unknown_branch():
     ks = build()
-    specific = ks.answer("What are the lobby hours at the Westfield branch?")
+    specific = ks.answer("What are the lobby hours at the Hilltop branch?")
     assert "9 a.m.-noon" in specific.text and "12:30" not in specific.text
     general = ks.answer("What are your lobby hours?")
     assert "8:30" in general.text and "noon" in general.text and "12:30" in general.text
     assert any(s.url.endswith("/contact") for s in general.sources)
     drive = ks.answer("What are the drive-up hours?")
     assert "8 a.m.-6 p.m." in drive.text
-    unknown = ks.answer("Can you give me the lobby hours for the Mullan Avenue branch?")
+    unknown = ks.answer("Can you give me the lobby hours for the Birch Avenue branch?")
     assert not unknown.confident and not numbers_in(unknown.text)
 
 
@@ -123,14 +123,14 @@ def test_address_prefers_the_locator_page():
     ks = build()
     a = ks.answer("What is the address of the Riverton branch?")
     assert "4620 Example" in a.text and "60001" in a.text
-    b = ks.answer("Where is the Westfield branch located?")
+    b = ks.answer("Where is the Hilltop branch located?")
     assert "1100 E. Commerce Parkway" in b.text
 
 
 def test_closure_status_with_alternatives():
     ks = build()
     a = ks.answer("Is the Riverside branch still open today?")
-    assert a.text.startswith("No.") and "March 31, 2026" in a.text and "Southgate and Birchwood Street" in a.text
+    assert a.text.startswith("No.") and "March 31, 2026" in a.text and "Elm Street and Maple Avenue" in a.text
     b = ks.answer("When does the Riverside branch close?")
     assert "March 31, 2026" in b.text
     c = ks.answer("Is the Riverton branch closing?")

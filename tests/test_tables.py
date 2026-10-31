@@ -123,3 +123,10 @@ def test_off_topic_table_on_product_page_loses_authority():
     on_checking = [f for f in _facts(RATES_PAGE, url="https://example-cu.test/personal/checking-accounts", auth=90)
                    if f.family == "auto"][0]
     assert on_rates.authority == 100 and on_checking.authority < 90
+
+
+def test_generic_label_detection_ignores_institution_name_but_keeps_products():
+    from ks.tables import _is_generic
+    org = frozenset({"example", "cu"})
+    assert _is_generic("Checking Accounts", org) and _is_generic("Example CU Checking", org)
+    assert not _is_generic("Share Savings", org) and not _is_generic("1st Rate Checking", org)

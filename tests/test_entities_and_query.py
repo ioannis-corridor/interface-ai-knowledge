@@ -89,8 +89,8 @@ def test_query_intents():
 def test_query_entities_and_dates():
     q = parse_rules("Can you repeat the routing number?")
     assert q.entity == "routing"
-    q = parse_rules("Can you give me the lobby hours for the Mullan Avenue branch?")
-    assert (q.entity, q.branch) == ("hours_lobby", "Mullan Avenue")
+    q = parse_rules("Can you give me the lobby hours for the Birch Avenue branch?")
+    assert (q.entity, q.branch) == ("hours_lobby", "Birch Avenue")
     q = parse_rules("How many Example CU employees used Volunteer Time Off last year?")
     assert q.entity is None                                   # not a head-count question
     q = parse_rules("What was the rate on the 10-month jumbo special as of May 2026?")
