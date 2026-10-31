@@ -101,11 +101,16 @@ def parse_effective(s: str) -> Optional[date]:
     return parse_numeric_date(m.group(1)) if m else None
 
 
-def parse_iso(s: Optional[str]) -> Optional[date]:
+def parse_iso(s) -> Optional[date]:
+    """ISO date or datetime string, or a date/datetime object -> date."""
     if not s:
         return None
+    if isinstance(s, datetime):
+        return s.date()
+    if isinstance(s, date):
+        return s
     try:
-        return datetime.fromisoformat(s[:10]).date()
+        return datetime.fromisoformat(str(s)[:10]).date()
     except ValueError:
         return None
 

@@ -1,0 +1,35 @@
+{"id": "p-001", "question": "How much interest does a five-year CD pay?", "as_of": null, "must_include": ["1.80"], "must_not_include": [], "category": "paraphrase"}
+{"id": "p-002", "question": "I'm financing a 2023 truck over six years. What's my rate?", "as_of": null, "must_include": ["5.79"], "must_not_include": ["5.49", "5.44"], "category": "paraphrase"}
+{"id": "p-003", "question": "Dividend rate on the 12 month certificate?", "as_of": null, "must_include": ["3.37"], "must_not_include": ["2.88"], "category": "paraphrase"}
+{"id": "p-004", "question": "jumbo 10 month special apy", "as_of": null, "must_include": ["4.00"], "must_not_include": ["3.90"], "category": "paraphrase"}
+{"id": "p-005", "question": "What did the 17-month jumbo special pay in June 2026?", "as_of": "2026-06-30", "must_include": ["3.95"], "must_not_include": ["4.20", "4.05"], "category": "temporal_as_of"}
+{"id": "p-006", "question": "What was the 12-month certificate APY on May 15, 2026?", "as_of": "2026-05-15", "must_include": ["2.90"], "must_not_include": ["3.40"], "category": "temporal_as_of"}
+{"id": "p-007", "question": "Has the 12-month certificate rate changed since May?", "as_of": null, "must_include": ["2.90", "3.40"], "must_not_include": [], "category": "change"}
+{"id": "p-008", "question": "What is the HELOC rate?", "as_of": null, "must_include": ["6.25"], "must_not_include": [], "category": "current_value"}
+{"id": "p-009", "question": "Rate for a 10-year home equity loan", "as_of": null, "must_include": ["7.24"], "must_not_include": ["6.74"], "category": "tier"}
+{"id": "p-010", "question": "APR on a 60 month personal loan", "as_of": null, "must_include": ["12.49"], "must_not_include": ["10.49"], "category": "tier"}
+{"id": "p-011", "question": "I want a $30,000 boat loan for 72 months, what's the APR?", "as_of": null, "must_include": ["7.34"], "must_not_include": ["7.09", "7.59"], "category": "tier"}
+{"id": "p-012", "question": "What does Launchpad Savings pay?", "as_of": null, "must_include": ["3.25"], "must_not_include": [], "category": "current_value"}
+{"id": "p-013", "question": "High-Yield Savings APY with $300,000 on deposit", "as_of": null, "must_include": ["2.05"], "must_not_include": ["2.25", "1.85"], "category": "tier"}
+{"id": "p-014", "question": "Rewards Visa interest rate?", "as_of": null, "must_include": ["15.50"], "must_not_include": ["12.50"], "category": "current_value"}
+{"id": "p-015", "question": "What's the APR on the business platinum card?", "as_of": null, "must_include": ["15.50"], "must_not_include": ["12.50", "20.50"], "category": "entity"}
+{"id": "p-016", "question": "Investor's Choice money market rate on $50,000", "as_of": null, "must_include": ["0.35"], "must_not_include": ["0.40", "0.30"], "category": "tier"}
+{"id": "p-017", "question": "HSA dividend rate for a $5,000 balance", "as_of": null, "must_include": ["0.25"], "must_not_include": ["0.30", "0.35"], "category": "tier"}
+{"id": "p-018", "question": "Roth IRA 36 month certificate APY", "as_of": null, "must_include": ["2.10"], "must_not_include": [], "category": "tier"}
+{"id": "p-019", "question": "How many members does Dupaco have?", "as_of": null, "must_include": ["179,000"], "must_not_include": [], "category": "entity"}
+{"id": "p-020", "question": "What are Dupaco's total assets?", "as_of": null, "must_include": ["3.6 billion"], "must_not_include": [], "category": "entity"}
+{"id": "p-021", "question": "What is Dupaco's phone number?", "as_of": null, "must_include": ["800-373-7600"], "must_not_include": [], "category": "entity"}
+{"id": "p-022", "question": "What's the rate on a 7-year personal loan?", "as_of": null, "must_include": [], "must_not_include": [], "category": "should_refuse"}
+{"id": "p-023", "question": "What are the lobby hours at the Dyersville branch?", "as_of": null, "must_include": [], "must_not_include": [], "category": "should_refuse"}
+{"id": "p-024", "question": "Where can I see auto loan rates on your site?", "as_of": null, "must_include": ["dupaco.com/personal/loans/auto"], "must_not_include": [], "category": "link"}
+{"id": "p-025", "question": "What is the current 1st Rate Checking APY?", "as_of": null, "must_include": ["2.50"], "must_not_include": ["3.00"], "category": "stale_trap"}
+{"id": "p-026", "question": "What was the 1st Rate Checking APY in May 2026?", "as_of": "2026-05-31", "must_include": ["3.00"], "must_not_include": ["2.50"], "category": "temporal_as_of"}
+{"id": "p-027", "question": "How much is the stop payment fee?", "as_of": null, "must_include": ["30"], "must_not_include": [], "category": "fee"}
+{"id": "p-028", "question": "What does an outgoing domestic wire cost?", "as_of": null, "must_include": ["25"], "must_not_include": ["10", "55"], "category": "fee"}
+{"id": "p-029", "question": "Is there a fee for a lost debit card?", "as_of": null, "must_include": [], "must_not_include": [], "category": "should_refuse"}
+{"id": "p-030", "question": "What is the 17-month certificate special rate?", "as_of": "2026-05-20", "must_include": [], "must_not_include": ["4.10", "3.85"], "category": "should_refuse"}
+{"id": "p-031", "question": "Which auto loan term has the lowest APR for a new car?", "as_of": null, "must_include": ["5.19"], "must_not_include": [], "category": "superlative"}
+{"id": "p-032", "question": "What's the APY on a 6-month share certificate?", "as_of": null, "must_include": ["3.40"], "must_not_include": [], "category": "paraphrase"}
+{"id": "p-033", "question": "How did the 60-month auto loan APR for new vehicles change between May and September 2026?", "as_of": null, "must_include": ["5.39"], "must_not_include": [], "category": "change"}
+{"id": "p-034", "question": "What's the minimum balance to earn the top Share Savings rate?", "as_of": null, "must_include": ["25,000"], "must_not_include": [], "category": "tier"}
+{"id": "p-035", "question": "Does Dupaco offer a 48-month certificate?", "as_of": null, "must_include": ["1.90"], "must_not_include": [], "category": "verify"}
