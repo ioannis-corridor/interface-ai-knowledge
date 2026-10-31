@@ -39,11 +39,17 @@ def _subject(question: str) -> str:
 
 
 class FeeAnswers(AnswerBase):
+    """Expects `answer_free` from TextAnswers on the same object (the Composer mixes both in)."""
+
     def answer_fee(self, q, sid: str) -> Draft:
         fees = self.facts(sid, "fee")
         thing = _subject(q.raw)
         keys: List[str] = [t for t in q.tokens if t not in FEE_NOISE and not t.isdigit()]
         if not fees or not keys:
+            if q.family and q.family != "fee":
+                free = self.answer_free(q, sid)
+                if free.confident:
+                    return free
             return Draft.refuse(REFUSE_FEE, thing=thing, org=self.org)
         matches = []
         for f in fees:
@@ -52,6 +58,10 @@ class FeeAnswers(AnswerBase):
                 extra = len(label_tokens - {t for k in keys for t in _alternatives(k)})
                 matches.append((-extra, f.authority, f))        # the most specific label wins
         if not matches:
+            if q.family and q.family != "fee":          # "monthly fee on Free Checking": the product page says
+                free = self.answer_free(q, sid)
+                if free.confident:
+                    return free
             return Draft.refuse(REFUSE_FEE, thing=thing, org=self.org)
         matches.sort(key=lambda t: (t[0], t[1]), reverse=True)
         best = matches[0][2]

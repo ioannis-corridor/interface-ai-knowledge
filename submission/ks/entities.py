@@ -166,6 +166,14 @@ FEE_LINE_RE = re.compile(
 EXPIRED_RE = re.compile(r"\b(offer|promotion|special|promo)\b[^.\n]{0,40}\b(ended|expired|ends|expires|valid through|through)\b[^.\n]{0,30}(\d{4}-\d{2}-\d{2}|" + LONG_DATE_RE.pattern + r"|\d{1,2}/\d{1,2}/\d{2,4})", re.I)
 
 
+def _flatten_row(line: str) -> str:
+    """'|Stop payment|$30.00 per item|||' (a PDF rendered as a table) -> 'Stop payment $30.00 per item'."""
+    if not line.lstrip().startswith("|"):
+        return line
+    cells = [c.strip() for c in line.strip().strip("|").split("|") if c.strip()]
+    return " ".join(cells) if len(cells) >= 2 and not set(cells[0]) <= set("-: ") else ""
+
+
 def _family_from_label(label: str) -> Optional[str]:
     low = label.lower()
     if re.search(r"\bfee\b|\bcharge\b|\bcost\b", low):
@@ -231,7 +239,7 @@ def extract_prose_facts(markdown: str, url: str, title: str, sid: str, authority
                               article_date=page_date, fetched_at=fetched, quote=line[:200], label=label))
             continue
         if is_fee_page:
-            fee = FEE_LINE_RE.match(line)
+            fee = FEE_LINE_RE.match(_flatten_row(line))
             if fee and not re.search(r"effective|schedule|following|subject to|please|charged|we will", line, re.I):
                 label = norm_space(fee.group("label")).strip(" -–:")
                 if i > 0 and plain_lines[i - 1] and not FEE_LINE_RE.match(plain_lines[i - 1]) and \

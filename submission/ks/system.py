@@ -105,8 +105,13 @@ class KnowledgeSystem:
         if self.llm is not None and needs_llm(q):
             q = merge_llm(q, self.llm.parse(question))
         as_of_date = parse_iso(as_of) or q.as_of_text
-        sid, _ = self.store.select(as_of_date)
+        sid, exact = self.store.select(as_of_date)
         draft = self.composer.compose(q, sid, self._reference_date(question, as_of_date, sid))
+        if not exact and draft.confident:
+            earliest = self.store.taken_on(sid).strftime("%B %Y")
+            draft.text += f" (This is from the earliest available copy of the website, crawled in {earliest}.)"
+            draft.conflict_note = (f"The date asked about predates the first crawl; the answer reflects the "
+                                   f"{earliest} crawl. " + (draft.conflict_note or "")).strip()
         return self._finalize(draft, sid, question)
 
     def _reference_date(self, question: str, as_of_date: Optional[date], sid: str) -> date:

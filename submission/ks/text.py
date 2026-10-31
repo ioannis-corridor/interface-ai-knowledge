@@ -1,6 +1,7 @@
 """Text utilities shared by the parsers, the index and the answer composer."""
 from __future__ import annotations
 
+import html
 import re
 from datetime import date, datetime
 from typing import Optional
@@ -56,8 +57,9 @@ def norm_space(s: str) -> str:
 
 
 def strip_markdown(s: str) -> str:
-    """Links keep their text, images vanish, emphasis markers go away."""
-    s = IMAGE_RE.sub("", s or "")
+    """Links keep their text, images vanish, emphasis markers go away, HTML entities are decoded."""
+    s = html.unescape(s or "")
+    s = IMAGE_RE.sub("", s)
     s = LINK_RE.sub(r"\1", s)
     s = re.sub(r"[*_`#>]+", "", s)
     s = s.replace("\\", "")

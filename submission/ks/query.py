@@ -237,7 +237,19 @@ def _detect_family_and_product(q: Query, low: str) -> None:
         q.family = PRODUCT_FAMILY.get(q.product, q.family)
 
 
+MIN_OPEN_RE = re.compile(r"minimum (?:\w+ ){0,2}to open|minimum (?:opening )?(?:deposit|amount)|opening (?:deposit|balance)|"
+                         r"how much (?:do i need|does it take|is (?:needed|required)|money) to open|(?:need|required) to open")
+MIN_EARN_RE = re.compile(r"minimum (?:\w+ ){0,2}to earn|minimum balance|balance (?:required|needed|do i need) to earn")
+TOP_RATE_RE = re.compile(r"\b(top|highest|best|maximum|lowest) (?:\w+ ){0,2}(rate|apy|apr|tier|yield)")
+
+
 def _detect_metric(q: Query, low: str) -> None:
+    if MIN_OPEN_RE.search(low) and not TOP_RATE_RE.search(low):
+        q.metric = "min_open"
+        return
+    if MIN_EARN_RE.search(low) and not TOP_RATE_RE.search(low):
+        q.metric = "min_earn"
+        return
     if re.search(r"\bapy\b|yield", low):
         q.metric = "apy"
     elif re.search(r"dividend rate", low):
@@ -295,11 +307,12 @@ def _detect_qualifiers(q: Query, text: str, low: str) -> None:
 
 
 def _detect_fee(q: Query, low: str) -> None:
-    if not FEE_RE.search(low) or re.search(r"\b(apy|apr|dividend|interest rate|yield)\b", low):
+    """A fee question keeps the product family it names (for the free-text fallback) but is answered as a fee."""
+    if not FEE_RE.search(low) or re.search(r"\b(apy|apr|dividend|interest rate|yield)\b", low) or q.metric in ("min_open", "min_earn"):
         return
-    card_fee = q.family == "credit_card" and re.search(r"debit|replace|lost|rush", low)
-    if q.family is None or q.family_weak or card_fee:
-        q.family, q.family_weak, q.metric = "fee", False, "fee"
+    if q.family is None or q.family_weak or q.family == "credit_card" and re.search(r"debit|replace|lost|rush", low):
+        q.family, q.family_weak = "fee", False
+    q.metric = "fee"
 
 
 def _is_list_question(q: Query, text: str, low: str) -> bool:
@@ -314,7 +327,7 @@ def _is_list_question(q: Query, text: str, low: str) -> bool:
 
 
 def _detect_intent(q: Query, text: str, low: str) -> str:
-    if q.family == "fee" and not q.entity:
+    if q.metric == "fee" and not q.entity:
         return "fee"
     if LINK_RE.search(text) or ACTION_RE.search(text):
         return "link"

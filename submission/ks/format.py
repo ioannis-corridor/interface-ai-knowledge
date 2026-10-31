@@ -8,7 +8,8 @@ from typing import Optional, Tuple
 from .model import INF, Fact
 from .text import fmt_money, range_text
 
-METRIC_WORDS = {"apy": "APY", "dividend_rate": "dividend rate", "apr": "APR", "rate": "rate", "fee": "fee"}
+METRIC_WORDS = {"apy": "APY", "dividend_rate": "dividend rate", "apr": "APR", "rate": "rate", "fee": "fee",
+                "min_open": "minimum to open", "min_earn": "minimum balance to earn dividends on"}
 
 
 def metric_word(metric: str) -> str:
