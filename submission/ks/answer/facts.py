@@ -12,13 +12,14 @@ from ..pages import url_key
 from ..store import best_of
 from ..text import pct_values
 from .base import DEPOSIT, PRIMARY_METRIC, AnswerBase, product_match
-from .draft import NOT_YET, REFUSE_RATE, Draft
+from .draft import GONE, NOT_YET, REFUSE_RATE, Draft
 
 NO_RATE_FAMILIES = {"construction", "student_loan"}
 GENERIC_LOAN_FAMILIES = {"auto", "atv", "boat_rv", "personal_loan", "home_improvement", "home_equity_loan"}
 RATE_METRICS = ("apy", "dividend_rate", "apr", "rate")
 MIN_METRICS = ("min_open", "min_earn")
 MAX_TIERS_LISTED = 14
+GENERIC_PRODUCT_RE = re.compile(r"\b(IRAs|Certificates|Accounts|Loans|Rates)$", re.I)
 Tiers = Dict[tuple, List[Fact]]
 
 
@@ -67,6 +68,9 @@ class FactAnswers(AnswerBase):
             c = [f for f in c if f.term_months == q.term_months]
         if q.model_year is not None:
             c = [f for f in c if f.model_years and f.model_years[0] <= q.model_year <= f.model_years[1]]
+        elif q.newest_model and any(f.model_years for f in c):
+            newest = max(f.model_years[1] for f in c if f.model_years)
+            c = [f for f in c if f.model_years and f.model_years[1] == newest]
         if q.balance is not None:
             c = [f for f in c if f.balance and f.balance[0] <= q.balance <= f.balance[1]]
         if q.amount is not None and any(f.amount for f in c):
@@ -109,6 +113,13 @@ class FactAnswers(AnswerBase):
         if not cands.facts:
             if sid != self.store.latest and self.candidates(q, self.store.latest).facts:
                 return Draft.refuse(NOT_YET, org=self.org)
+            last = self._last_seen(q, sid)
+            if last:
+                seen_sid, seen = last
+                draft = Draft.refuse(GONE, thing=self.thing(q), org=self.org)
+                draft.conflict_note = (f"Last listed in the {month_text(self.store.taken_on(seen_sid))} crawl "
+                                       f"({seen.value} {metric_word(seen.metric)} on {url_key(seen.url)}).")
+                return draft
             return Draft.refuse(REFUSE_RATE, thing=self.thing(q), org=self.org)
         tiers = cands.tiers()
         pinned = q.model_year is not None or q.balance is not None or q.amount is not None
@@ -130,6 +141,16 @@ class FactAnswers(AnswerBase):
         if q.superlative:
             return self.superlative(q, sid, tiers, cands.metric)
         return self.multi(sid, tiers, cands.metric)
+
+    def _last_seen(self, q, sid: str):
+        """The newest earlier snapshot that still had a matching fact (a product that was since dropped)."""
+        for earlier, _ in reversed(self.store.snapshots):
+            if self.store.taken_on(earlier) >= self.store.taken_on(sid):
+                continue
+            found = self.candidates(q, earlier).facts
+            if found:
+                return earlier, best_of(found)
+        return None
 
     def single(self, sid: str, win: Fact, agree: List[Fact], note: Optional[str], metric: str) -> Draft:
         name = product_name(win)
@@ -183,10 +204,14 @@ class FactAnswers(AnswerBase):
     def multi(self, sid: str, tiers: Tiers, metric: str) -> Draft:
         """No tier was asked for: list every tier with its own value. Tiers are different facts, not conflicts."""
         items = [self.resolve(fs)[:2] for fs in tiers.values()]
-        # A copy of the same product/value without tier detail (older page layout) is not another tier.
+        # A copy of the same product/value without tier detail (older page layout) is not another tier, and a
+        # table labelled only "Variable IRAs" duplicates the Roth/Traditional rows that carry the same values.
         rich = {(w.product, w.value) for w, _ in items if w.balance or w.amount or w.model_years or w.term_months}
         items = [(w, a) for w, a in items
                  if (w.balance or w.amount or w.model_years or w.term_months) or (w.product, w.value) not in rich]
+        specific = {(w.value, w.soft_key()[4:8]) for w, _ in items if not GENERIC_PRODUCT_RE.search(w.product)}
+        items = [(w, a) for w, a in items
+                 if not (GENERIC_PRODUCT_RE.search(w.product) and (w.value, w.soft_key()[4:8]) in specific)]
         items = sorted(items, key=lambda it: (it[0].business, it[0].intro, it[0].jumbo, -it[0].special, it[0].term_months or 0,
                                               -(it[0].balance[0] if it[0].balance else 0),
                                               (it[0].amount[1] if it[0].amount else 0),
