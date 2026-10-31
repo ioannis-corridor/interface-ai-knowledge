@@ -41,11 +41,15 @@ Authority only matters when two sources disagree on the same fact. The order is:
 A page is not stale because it is old. The Hy-Vee closing date comes from a 2025 release that nothing
 newer contradicts.
 
-Absence from the authoritative source is a signal too. If the rate sheet covers a product family but a product
-or tier appears only on promo landing pages, calculators or files, the system treats the offer as ended: it
-refuses with a "the current rate sheet doesn't list it" message and keeps the leftover value in
-`conflict_note`. For the same reason, vanished promo and calculator pages are not carried forward; vanished
-informational pages (the fee schedule, the contact page) are.
+Absence from the authoritative source is a signal too, and it is applied where candidates are selected, so
+every rate intent (one value, list, verify, change, superlative) sees the same rule. A rate sheet or product page
+may always state a current value. A promo landing page, calculator, file, press release or blog post may do so
+only when no authoritative page covers the family, or when its own date ("effective as of" or article date) is
+at or after the family's newest rate-sheet date; otherwise it is a leftover. If only leftovers match, the system
+refuses with "the website's current rate sheet doesn't list it" and keeps the leftover value and its date in
+`conflict_note`. When the rate sheet carries no date, a secondary copy must be from the last 180 days of the
+crawl to count. Vanished promo and calculator pages are not carried forward; vanished informational pages (the
+fee schedule, the contact page) are.
 
 ## How a question is answered
 
@@ -111,7 +115,7 @@ regression set. `scripts/check.sh` runs lint, the unit tests, the self-test and 
 ## Code quality
 
 - `ruff check submission tests` passes with the rule set in `pyproject.toml`.
-- 67 tests on synthetic fixtures cover table parsing, prose extraction, the query parser, the store and index,
+- 71 tests on synthetic fixtures cover table parsing, prose extraction, the query parser, the store and index,
   conflicts, the LLM merge (stubbed client), every answer handler, and two-snapshot end-to-end flows. Line
   coverage is 90%.
 - CI runs lint, tests and the harness self-test on Python 3.9, 3.11 and 3.12.

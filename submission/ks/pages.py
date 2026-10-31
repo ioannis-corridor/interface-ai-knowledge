@@ -47,12 +47,12 @@ def classify(url: str, title: str = "") -> int:
         return FILE
     if path.startswith(("/calculators", "/business-calculators")):
         return CALCULATOR
-    if path in LANDING_PATHS or path.endswith("-lp") or re.search(r"promo|offer|special|campaign|contest", path):
-        return LANDING
     if path.startswith("/newsroom"):
         return OTHER if re.search(r"/(tag|author)/", path) else NEWSROOM
     if path.startswith(("/learn", "/resources", "/business/resources")) or re.search(r"/20\d\d/\d\d/", path):
         return OTHER if re.search(r"/(tag|author)/", path) else LEARN
+    if path in LANDING_PATHS or path.endswith("-lp") or re.search(r"promo|offer|special|campaign|contest", path):
+        return LANDING
     if "privacy" in path or path.startswith("/disclosures") or "terms" in path:
         return CALCULATOR          # legal boilerplate: keep it searchable, never authoritative
     if q:

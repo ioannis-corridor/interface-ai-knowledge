@@ -13,8 +13,7 @@ REFUSE_BRANCH = ("The website doesn't list {what} for the {branch} branch. Pleas
                  "locator on the contact page.")
 NOT_YET = "That product isn't listed on the website as of that date. Please contact {org} for details."
 GONE = "The website no longer lists {thing}; it appeared in an earlier crawl but not in the current one. Please contact {org} for details."
-NOT_ON_SHEET = ("The current rate sheet doesn't list {thing}. A promotional or calculator page still mentions it, but that offer "
-                "isn't among the website's current rates. Please contact {org} to confirm.")
+NOT_ON_SHEET = "The website's current rate sheet doesn't list {thing}. Please contact {org} to confirm whether it is still offered."
 
 
 @dataclass

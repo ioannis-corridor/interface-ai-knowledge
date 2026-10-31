@@ -150,3 +150,63 @@ def test_explicit_metric_gives_a_single_number():
     assert "4.10%" in explicit.text and "4.06" not in explicit.text
     ambiguous = ks.answer("What is the rate on the 17-month certificate special?")
     assert "4.10%" in ambiguous.text                                # APY leads for deposits; companion allowed
+
+
+OLD_RELEASE = """# Example CU launches an 11-month certificate special | Example CU
+2 min read
+
+[Jane Doe](https://x.test/newsroom/author/jane) March 02, 2023
+
+DUBUQUE, Iowa—Example CU today announced an 11-month certificate special with an APY of 5.00% for new money.
+"""
+FRESH_PROMO = """# Fall savings offer | Example CU
+Special Certificates
+
+| Certificate | Dividend Rate | Annual Percentage Yield (APY) | Min. to Earn |
+| --- | --- | --- | --- |
+| 9 Month Fixed Certificate Special | 4.41% | 4.50% | $1,000.00 |
+
+Rates are effective as of 09/20/2026 and are subject to change without notice.
+"""
+
+
+def _site(extra_pages):
+    ks = KnowledgeSystem(contract, use_llm=False)
+    pages = [contract.Page(url="https://x.test/rates", title="Rates | Example CU", markdown=RATES_SEP, fetched_at="2026-09-28T00:00:00Z")]
+    pages += [contract.Page(url=u, title=t, markdown=m, fetched_at="2026-09-28T00:00:00Z") for u, t, m in extra_pages]
+    ks.ingest(contract.Snapshot("01_2026-05-12", "2026-05-12", [
+        contract.Page(url="https://x.test/rates", title="Rates | Example CU", markdown=RATES_MAY, fetched_at="2026-05-12T00:00:00Z"),
+        contract.Page(url="https://x.test/membermoneymarket-lp", title="Offer | Example CU", markdown=PROMO, fetched_at="2026-05-12T00:00:00Z")]))
+    ks.ingest(contract.Snapshot("02_2026-09-28", "2026-09-28", pages))
+    return ks
+
+
+def test_ended_offer_is_refused_by_every_rate_intent():
+    ks = _site([("https://x.test/membermoneymarket-lp", "Offer | Example CU", PROMO)])
+    for q in ("Do you still offer a 25-month certificate special at 3.60% APY?",
+              "Did the 25-month certificate special APY change?",
+              "What is the highest 25-month certificate special APY?",
+              "What is the 25-month certificate special APY?"):
+        a = ks.answer(q)
+        assert not a.confident and "3.60" not in a.text, (q, a.text)
+        assert a.conflict_note and "3.60%" in a.conflict_note
+
+
+def test_old_press_release_rate_is_not_current():
+    ks = _site([("https://x.test/newsroom/eleven-month-special", "Special | Example CU", OLD_RELEASE)])
+    a = ks.answer("What is the 11-month certificate special APY?")
+    assert not a.confident and "5.00" not in a.text and "an 11-month" in a.text
+    assert "5.00%" in a.conflict_note and "2023-03-02" in a.conflict_note
+    assert "5.00" not in ks.answer("Did the 11-month certificate special APY change?").text
+
+
+def test_fresh_promo_only_product_is_still_answered():
+    ks = _site([("https://x.test/fall-savings-offer", "Offer | Example CU", FRESH_PROMO)])
+    a = ks.answer("What is the 9-month certificate special APY?")
+    assert a.confident and "4.50%" in a.text          # dated after the rate sheet: new information, not a leftover
+
+
+def test_newsroom_slug_with_promo_word_stays_newsroom():
+    from ks.pages import LANDING, NEWSROOM, classify
+    assert classify("https://x.test/newsroom/eleven-month-special") == NEWSROOM
+    assert classify("https://x.test/fall-savings-offer") == LANDING
