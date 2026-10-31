@@ -58,8 +58,12 @@ newer contradicts.
    tables do not contain is dropped.
 6. The system refuses when the product exists but the requested figure does not (a 7/1 ARM rate, a
    construction-loan rate, hours for a branch with no hours on the site, a fee the schedule does not list).
-   Refusals contain no numbers and set `confident=False`.
-7. Answers are cached by normalised question and `as_of`, so repeated questions return the same text.
+   Refusals contain no numbers and set `confident=False`. A product that an earlier crawl listed but the
+   current one does not gets a "no longer lists" refusal, with the last value in `conflict_note`.
+7. "Minimum to open" and "minimum balance to earn" questions read the matching table columns. Fee questions
+   check the fee schedule first and fall back to the product page text ("no monthly service charges").
+8. If `as_of` is earlier than the first crawl, the answer comes from the earliest crawl and says so.
+9. Answers are cached by normalised question and `as_of`, so repeated questions return the same text.
 
 ## How conflicts are found
 
@@ -91,9 +95,9 @@ questions that use it.
 ## Code quality
 
 - `ruff check submission tests` passes with the rule set in `pyproject.toml`.
-- 53 tests on synthetic fixtures cover table parsing, prose extraction, the query parser, the store and index,
+- 62 tests on synthetic fixtures cover table parsing, prose extraction, the query parser, the store and index,
   conflicts, the LLM merge (stubbed client), every answer handler, and two-snapshot end-to-end flows. Line
-  coverage is 89%.
+  coverage is 90%.
 - CI runs lint, tests and the harness self-test on Python 3.9, 3.11 and 3.12.
 - `answer()` never raises: a handler bug is logged and turns into a digit-free refusal.
 

@@ -1,5 +1,5 @@
 """Newest-model tier, products dropped since an earlier crawl, generic-label dedupe, describe questions, and the
-describe questions, and the fragment filters in free-text answers."""
+fragment filters in free-text answers."""
 import contract
 
 from ks.answer.retrieval import _is_sentence
