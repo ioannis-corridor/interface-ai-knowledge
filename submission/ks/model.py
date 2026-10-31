@@ -48,8 +48,8 @@ class Fact:
         different values are a contradiction; different soft keys are different tiers."""
         return (
             self.family, self.business, _norm_product(self.product), self.metric, self.term_months,
-            self.model_years, self.balance, self.amount, self.jumbo, self.special, self.ira_type, self.purpose,
-            self.intro,
+            self.model_years, _norm_range(self.balance), _norm_range(self.amount), self.jumbo, self.special,
+            self.ira_type, self.purpose, self.intro,
         )
 
     def group_key(self) -> tuple:
@@ -84,6 +84,14 @@ def canonical_product(product: str, family: str) -> str:
     if family == "certificate" and re.fullmatch(r"\d+\s*months?", low):
         return product.rstrip("s") + " Certificate"
     return product
+
+
+def _norm_range(rng):
+    """$0 – $2,499.99 and $0.01 – $2,499.99 are the same tier."""
+    if not rng:
+        return None
+    lo, hi = rng
+    return (int(lo), hi if hi == INF else int(hi))
 
 
 def _norm_product(product: str) -> str:

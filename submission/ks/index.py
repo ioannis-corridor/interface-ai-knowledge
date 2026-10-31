@@ -33,7 +33,7 @@ def split_chunks(markdown: str) -> List[Tuple[str, str, bool]]:
     def flush():
         if buf:
             txt = strip_markdown(" ".join(buf))
-            if len(txt) > 25:
+            if _is_prose(txt):
                 out.append((heading, txt, False))
             buf.clear()
 
@@ -67,6 +67,11 @@ def split_chunks(markdown: str) -> List[Tuple[str, str, bool]]:
         i += 1
     flush()
     return out
+
+
+def _is_prose(txt: str) -> bool:
+    """Skip link labels and menu fragments ('Open my Holiday Club'): keep text that reads like a sentence."""
+    return len(txt) > 60 or (len(txt) > 25 and bool(re.search(r"[.!?:]", txt)))
 
 
 class ChunkIndex:

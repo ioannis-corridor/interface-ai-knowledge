@@ -12,6 +12,7 @@ REFUSE_GENERIC = "I don't know; the website doesn't say. Please contact {org} fo
 REFUSE_BRANCH = ("The website doesn't list {what} for the {branch} branch. Please contact {org} or check the branch "
                  "locator on the contact page.")
 NOT_YET = "That product isn't listed on the website as of that date. Please contact {org} for details."
+GONE = "The website no longer lists {thing}; it appeared in an earlier crawl but not in the current one. Please contact {org} for details."
 
 
 @dataclass

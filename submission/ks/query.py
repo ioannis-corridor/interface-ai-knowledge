@@ -65,6 +65,7 @@ ACTION_RE = re.compile(r"\b(join|become a member|sign up|enroll|apply|open an? a
 CHANGE_RE = re.compile(r"\b(chang(?:e|ed|es|ing)|before|previous(?:ly)?|used to|went (?:up|down)|increas|decreas|\brose\b|\brisen\b|\bfell\b|\bdrop|history|over time|compared|differ(?:ent|ence) (?:from|than|between)|since (?:may|june|july|august|april|march|last))\b", re.I)
 AGGREGATE_RE = re.compile(r"\b(all|every|each)\s+(?:dupaco\s+)?branch|same (?:lobby |drive[- ]up )?hours|hours (?:vary|differ)|(?:vary|differ) by branch", re.I)
 LIST_RE = re.compile(r"\b(what|which)\b.*\b(do you (?:offer|have)|are (?:there|available|offered)|options|types|kinds)\b|\b(all|list|every)\b.*\b(rate|certificate|card|term|account|loan)s?\b|\brates? for (?:the|your|all) (?:certificate|cd|credit card|card|checking|savings)s?\b|\b(?:certificate|cd|credit card|card|checking|savings) (?:account )?rates?\b", re.I)
+DESCRIBE_RE = re.compile(r"^\s*(tell me about|what is|what's|whats|describe|explain|what are the (?:benefits|features)|how does .* work)\b", re.I)
 SUPERLATIVE_RE = re.compile(r"\b(highest|best|top|maximum|max|most|lowest|minimum|cheapest)\b", re.I)
 VERIFY_RE = re.compile(r"^\s*(do|does|is|are|can|did|will|has|have)\b", re.I)
 REPEAT_RE = re.compile(r"\b(repeat|again|one more time|once more)\b", re.I)
@@ -85,7 +86,7 @@ PRODUCT_FAMILY = {"Investor's Choice Money Market": "money_market", "Health Savi
 @dataclass
 class Query:
     raw: str
-    intent: str = "fact"           # fact | list | link | change | status | aggregate | verify | superlative | free
+    intent: str = "fact"           # fact | list | link | change | status | aggregate | verify | superlative | fee | describe | free
     family: Optional[str] = None
     product: Optional[str] = None
     metric: Optional[str] = None   # apy | dividend_rate | apr | rate | min_open | min_earn
@@ -99,6 +100,7 @@ class Query:
     purpose: Optional[str] = None
     intro: Optional[bool] = None
     business: Optional[bool] = None
+    newest_model: bool = False     # "brand new car": the newest model-year tier
     entity: Optional[str] = None
     branch: Optional[str] = None
     pct_value: Optional[float] = None
@@ -265,6 +267,8 @@ def _detect_metric(q: Query, low: str) -> None:
 def _detect_qualifiers(q: Query, text: str, low: str) -> None:
     q.term_months = _parse_term(text)
     q.model_year = _parse_model_year(text) if q.family in ("auto", "atv", "boat_rv", None) else None
+    if q.family in ("auto", "atv") and q.model_year is None and re.search(r"\b(brand[- ]new|new|newest|latest|current[- ]year)\b", low):
+        q.newest_model = True
     money = _parse_money(text)
     if money is not None:
         if q.family in DEPOSIT_FAMILIES:
@@ -347,6 +351,8 @@ def _detect_intent(q: Query, text: str, low: str) -> str:
         return "list"
     if q.family and q.metric:
         return "fact"
+    if q.family and DESCRIBE_RE.search(text) and not (q.term_months or q.model_year or q.balance is not None):
+        return "describe"                    # "tell me about Launchpad Savings" wants the description
     if q.family and (q.term_months or q.product or q.model_year or q.balance is not None):
         return "fact"
     return "free"
@@ -354,7 +360,7 @@ def _detect_intent(q: Query, text: str, low: str) -> str:
 
 def needs_llm(q: Query) -> bool:
     """Only questions the rules could not place are worth an LLM call."""
-    return (q.family is None or q.family_weak) and q.entity is None and q.intent in ("free", "fact")
+    return (q.family is None or q.family_weak) and q.entity is None and q.intent in ("free", "fact", "describe")
 
 
 def merge_llm(rules: Query, llm: Optional[dict]) -> Query:

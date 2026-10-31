@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import date
 
+from ..text import tokenize
 from .draft import REFUSE_BRANCH, Draft
 from .entity import EntityAnswers
 from .facts import FactAnswers
@@ -10,6 +11,14 @@ from .fees import FeeAnswers
 from .retrieval import TextAnswers
 
 BRANCH_ENTITIES = {"hours_lobby", "hours_driveup", "address", "closure"}
+GENERIC_PRODUCT_TOKENS = {"account", "saving", "checking", "visa", "card", "certificate", "money", "market"}
+
+
+def _names_product(text: str, product: str) -> bool:
+    """A description of Launchpad Savings has to say 'Launchpad'; a stray 'savings' sentence does not count."""
+    key = [t for t in tokenize(product) if t not in GENERIC_PRODUCT_TOKENS]
+    low = text.lower()
+    return all(t in low for t in key) if key else True
 
 
 class Composer(EntityAnswers, FactAnswers, FeeAnswers, TextAnswers):
@@ -38,6 +47,11 @@ class Composer(EntityAnswers, FactAnswers, FeeAnswers, TextAnswers):
             return self.answer_verify(q, sid)
         if q.intent == "change" and q.family:
             return self.answer_change(q, sid)
+        if q.intent == "describe":
+            free = self.answer_free(q, sid)
+            if free.confident and (not q.product or _names_product(free.text, q.product)):
+                return free
+            return self.answer_fact(q, sid) if q.product or q.metric else free
         if q.intent in ("fact", "superlative") and q.family:
             if q.metric is None and not (q.term_months or q.product or q.model_year or q.balance is not None):
                 return self.answer_free(q, sid)      # "do you have student loans?" is a description, not a rate

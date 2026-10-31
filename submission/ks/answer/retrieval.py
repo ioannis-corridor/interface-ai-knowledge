@@ -7,6 +7,7 @@ from typing import List, Tuple
 
 from ..format import tidy
 from ..index import Chunk
+from ..model import FAMILY_NAMES
 from ..pages import OTHER
 from ..text import pct_values, sentences, tokenize
 from .base import AnswerBase
@@ -27,6 +28,11 @@ BUSINESS_LINK_TARGETS = {"certificate": "/business/savings-accounts", "savings":
 DEFINITIONAL_RE = re.compile(r"^\s*(what is|what's|whats|tell me about|describe|explain|what does .* (?:do|mean|offer))\b", re.I)
 WANTS_NUMBER_RE = re.compile(r"how many|how much|what (?:is|was) the (?:number|amount|cost|fee)", re.I)
 Hit = Tuple[float, Chunk, str]
+
+
+def _is_sentence(s: str) -> bool:
+    """Menu labels and glued call-to-action links ('Open my Holiday Club Launchpad Savings') are not answers."""
+    return bool(re.search(r"[.!?]\s*$", s)) or len(s.split()) >= 10 or bool(re.search(r"\d", s))
 
 
 class TextAnswers(AnswerBase):
@@ -90,9 +96,30 @@ class TextAnswers(AnswerBase):
                 continue
             if q.family is None and re.search(r"\b(rate|apr|apy|interest)\b", q.raw, re.I) and re.search(r"\d+(?:\.\d+)?\s?%", text):
                 return Draft.refuse(REFUSE_RATE, thing="that", org=self.org)
-            return Draft(tidy(text[:600]), urls=[(url, lead[:200])])
-        _, chunk, url = hits[0]
-        return Draft(tidy(chunk.text[:400]), urls=[(url, chunk.text[:200])])
+            return Draft(tidy(self._name_family(q, text[:600])), urls=[(url, lead[:200])])
+        # Nothing overlapped the question word for word: fall back to the lead sentences of the best prose chunk.
+        for _, chunk, url in hits[:6]:
+            if chunk.is_table:
+                continue
+            declarative = [s for s in sentences(chunk.text) if _is_sentence(s) and not s.rstrip().endswith("?")]
+            lead = ([s for s in declarative if len(s.split()) >= 12] or declarative)[:2]   # descriptions, not CTAs
+            if lead:
+                text = self._scrub_stale_rates(" ".join(lead), sid)
+                if text.strip():
+                    return Draft(tidy(self._name_family(q, text[:600])), urls=[(url, lead[0][:200])])
+        return Draft.refuse(REFUSE_GENERIC, org=self.org)
+
+    @staticmethod
+    def _name_family(q, text: str) -> str:
+        """An answer about student loans should say 'student loans' even when the quoted sentence does not."""
+        name = FAMILY_NAMES.get(q.family)
+        if not name or q.product:
+            return text
+        key = [t for t in tokenize(name) if t not in ("account", "loan")] or tokenize(name)
+        if all(t in set(tokenize(text)) for t in key):
+            return text
+        plural = name if name.endswith("s") else name + "s"
+        return f"{plural[0].upper()}{plural[1:]}: {text}"
 
     @staticmethod
     def _rank(hits: List[Hit], qset: set, definitional: bool) -> List[Hit]:
@@ -114,6 +141,8 @@ class TextAnswers(AnswerBase):
     def _pick_sentences(sents: List[str], qset: set, wants_number: bool, definitional: bool) -> Tuple[List[str], str]:
         scored = []
         for i, s in enumerate(sents):
+            if not _is_sentence(s) or (definitional and s.rstrip().endswith("?")):
+                continue
             overlap = len(qset & set(tokenize(s)))
             if overlap:
                 bonus = 0.6 if (wants_number and re.search(r"\d", s)) else 0.0
@@ -126,7 +155,7 @@ class TextAnswers(AnswerBase):
         if lead.rstrip().endswith("?") and i + 1 < len(sents):   # FAQ layout: question, then the answer
             return sents[i + 1:i + 3], lead
         picked = [lead]
-        if i + 1 < len(sents) and len(sents[i + 1]) < 260 and (
+        if i + 1 < len(sents) and len(sents[i + 1]) < 260 and _is_sentence(sents[i + 1]) and (
                 definitional or wants_number or (len(lead) < 160 and set(tokenize(sents[i + 1])) & qset)):
             picked.append(sents[i + 1])
         return picked, lead
