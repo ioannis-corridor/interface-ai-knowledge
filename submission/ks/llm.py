@@ -1,7 +1,7 @@
 """Optional LLM question parser (Anthropic). It only maps a question to the structured query schema the rules
 parser uses; it never sees the website text and never writes answer text, so it cannot introduce numbers.
 
-Enabled when ANTHROPIC_API_KEY is set (and KS_DISABLE_LLM is not). Any failure or timeout falls back to the rules.
+Enabled only when KS_USE_LLM=1 and ANTHROPIC_API_KEY are both set. Any failure or timeout falls back to the rules.
 """
 from __future__ import annotations
 

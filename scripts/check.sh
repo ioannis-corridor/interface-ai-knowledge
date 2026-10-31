@@ -3,7 +3,7 @@
 # snapshot zips are present in snapshots_zip/) the practice set and the extra paraphrase set.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-export KS_DISABLE_LLM=1
+unset KS_USE_LLM   # the offline path is the graded path
 PY="${PYTHON:-$(command -v python3 || command -v python)}"
 "$PY" -m ruff check submission tests
 "$PY" -m pytest
