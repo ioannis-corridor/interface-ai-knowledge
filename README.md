@@ -34,6 +34,16 @@ The run is offline and deterministic by default. An optional LLM question parser
 both `KS_USE_LLM=1` and `ANTHROPIC_API_KEY` in the environment of the process running the scorer to turn it on.
 No key is stored in the repository, and the rule-based parser handles every question without it.
 
+## Try it
+
+```bash
+python scripts/ask.py                                   # interactive: type questions, `|| 2026-05-31` for an as-of date
+python scripts/ask.py "What is the 60-month auto loan APR?" "What was the 12-month certificate APY? || 2026-05-31"
+```
+
+Inside the prompt, `/conflicts` prints the contradictions the system found, `/asof 2026-05-31` sets a default
+date, and `/quit` exits.
+
 ## Quality checks
 
 ```bash

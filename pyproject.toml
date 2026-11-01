@@ -1,7 +1,7 @@
 [tool.ruff]
 line-length = 120
 target-version = "py39"
-src = ["submission", "tests"]
+src = ["submission", "tests", "scripts"]
 extend-exclude = ["harness", "starter"]
 
 [tool.ruff.lint]
