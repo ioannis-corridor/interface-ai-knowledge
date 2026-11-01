@@ -37,12 +37,14 @@ No key is stored in the repository, and the rule-based parser handles every ques
 ## Try it
 
 ```bash
-python scripts/ask.py                                   # interactive: type questions, `|| 2026-05-31` for an as-of date
-python scripts/ask.py "What is the 60-month auto loan APR?" "What was the 12-month certificate APY? || 2026-05-31"
+python scripts/ask.py                                               # interactive prompt
+python scripts/ask.py "What is the 60-month auto loan APR?"         # one-shot
+python scripts/ask.py --as-of 2026-05-31 "What is the 12-month certificate APY?"
+python scripts/ask.py --conflicts                                   # the contradictions found
 ```
 
-Inside the prompt, `/conflicts` prints the contradictions the system found, `/asof 2026-05-31` sets a default
-date, and `/quit` exits.
+Inside the prompt, `/asof 2026-05-31` answers as of that date (`/asof` alone resets), `/conflicts` prints the
+contradictions, and `/quit` exits.
 
 ## Quality checks
 
