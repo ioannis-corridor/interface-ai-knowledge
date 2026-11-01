@@ -26,7 +26,8 @@ Each snapshot is parsed into three stores. Ingest for five snapshots (about 3,30
 Each page gets an authority class from its URL: rate sheets (100) > product pages (90) > contact and
 about pages (85) > newsroom (60) > blog (50) > promo landing pages (40) > calculators and legal pages (30)
 > files (20). A table that does not match its page (an auto table on the checking page) loses 40 points.
-A page missing from a crawl stays known from the newest earlier crawl, at 10 points less.
+A page missing from a crawl stays known from the newest earlier crawl, at 10 points less, except promo landing
+pages and calculators, which are not carried forward.
 
 ## How "current" is decided
 
@@ -64,8 +65,10 @@ authoritative threshold, so its facts count only when dated at or after the curr
 3. The facts for that snapshot are filtered by the query. A model year matches a tier by range, so 2025
    matches "2024-27 Model Year". When several pages give different values for the same tier, the authority
    order above picks one and the others go into `conflict_note`.
-4. The answer text is built from templates. It states one value per fact. An `as_of` answer never mentions
-   values from other dates. If the question gives no tier, every tier is listed with its own value.
+4. The answer text is built from templates. It states one value per fact: when the question names the metric
+   (APY, APR, dividend rate) that number alone; for an ambiguous "rate" the APY leads and the dividend rate
+   follows in parentheses. An `as_of` answer never mentions values from other dates. If the question gives no
+   tier, every tier is listed with its own value.
 5. Free-text questions (eligibility, how-to, descriptions) use BM25 retrieval and return one or two
    sentences from the best chunk, never the whole chunk. A sentence that quotes a rate the current rate
    tables do not contain is dropped.
@@ -122,7 +125,7 @@ tests, the self-test and, when the files are present, both question sets.
 
 ## Code quality
 
-- `ruff check submission tests` passes with the rule set in `pyproject.toml`.
+- `ruff check submission tests scripts` passes with the rule set in `pyproject.toml`.
 - 73 tests on synthetic fixtures cover table parsing, prose extraction, the query parser, the store and index,
   conflicts, the LLM merge (stubbed client), every answer handler, and two-snapshot end-to-end flows. Line
   coverage is 90%.

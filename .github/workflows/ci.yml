@@ -21,7 +21,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt pytest ruff
       - name: Lint
-        run: ruff check submission tests
+        run: ruff check submission tests scripts
       - name: Unit tests
         run: python -m pytest
       - name: Harness self-test (synthetic site, conflicts gold)

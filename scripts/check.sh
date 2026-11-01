@@ -6,7 +6,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 unset KS_USE_LLM   # the offline path is the graded path
 PY="${PYTHON:-$(command -v python3 || command -v python)}"
-"$PY" -m ruff check submission tests
+"$PY" -m ruff check submission tests scripts
 "$PY" -m pytest
 "$PY" harness/run_eval.py --submission submission --snapshots harness/selftest/snapshots \
     --eval harness/selftest/eval.jsonl --conflicts-gold harness/selftest/conflicts_gold.json --out results/selftest

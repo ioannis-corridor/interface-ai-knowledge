@@ -56,7 +56,7 @@ scripts/check.sh                   # lint, 73 tests (90% line coverage), harness
 Or step by step:
 
 ```bash
-ruff check submission tests
+ruff check submission tests scripts
 python -m pytest
 python harness/run_eval.py --submission submission --snapshots harness/selftest/snapshots \
     --eval harness/selftest/eval.jsonl --conflicts-gold harness/selftest/conflicts_gold.json
