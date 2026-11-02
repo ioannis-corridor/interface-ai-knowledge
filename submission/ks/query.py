@@ -48,9 +48,9 @@ PRODUCT_PATTERNS = [
 ENTITY_PATTERNS = [
     ("routing", r"routing (?:number|#|no)|\baba\b"),
     ("phone", r"\b(phone|telephone|call you|contact number|customer service number|member service number)\b"),
-    ("branch_count", r"how many (?:\w+ ){0,2}(?:branch|location|office)|number of (?:branch|location)"),
-    ("employee_count", r"how many (?:\w+ ){0,2}(?:employees|staff|people)(?:\s+(?:does|do|work|are|at|in)\b|\s*\?|\s*$)|number of employees|how many people work"),
-    ("member_count", r"how many members|number of members|membership (?:size|count)"),
+    ("branch_count", r"how many (?:\w+ ){0,2}(?:branch|location|office)|number of (?:branch|location)|\b(?:branch(?:es)?|locations?|offices?) count\b|count of (?:branch|location|office)"),
+    ("employee_count", r"how many (?:\w+ ){0,2}(?:employees|staff|people)(?:\s+(?:does|do|work|are|at|in)\b|\s*\?|\s*$)|number of employees|how many people work|\b(?:employee|staff) count\b|\bheadcount\b"),
+    ("member_count", r"how many members|number of members|membership (?:size|count)|\bmember count\b"),
     ("assets", r"total assets|assets (?:under|of)|how (?:big|large) is"),
     ("forbes", r"\bforbes\b"),
     ("eligibility", r"\beligib\w*|\bwho can (?:join|become|open)|\bqualif\w* (?:for|to) (?:join|member)|\bhow (?:do|can) i (?:join|become a member)|\brequirements? (?:to|for) (?:join|member)|\bmembership requirements?"),
@@ -185,6 +185,41 @@ def _parse_as_of(text: str) -> Optional[date]:
 
 NOT_A_BRANCH = {"the", "a", "which", "what", "any", "each", "every", "all", "your", "nearest", "closest", "our", "my"}
 
+# Left-trimmed off a casually-phrased branch name ("when does the dyersville location open"): question words,
+# verbs and prepositions that can sit between the sentence start and the name. Trimming stops at the first
+# word that is none of these, so a real name ("Mullan Avenue", "Hy-Vee") is never shortened.
+BRANCH_LEAD_TRIM = NOT_A_BRANCH | {
+    "an", "this", "that", "its", "their", "his", "her", "i", "we", "you", "me", "they", "it",
+    "is", "are", "was", "were", "does", "do", "did", "can", "could", "will", "would", "when", "where", "how",
+    "why", "who", "and", "or", "for", "at", "in", "on", "of", "to", "from", "about", "hours", "hour", "lobby",
+    "time", "open", "opens", "opened", "close", "closes", "closed", "closing", "visit", "go", "get", "find",
+    "see", "tell", "give", "know", "need", "want", "many", "much", "there", "near", "local", "nearby", "other",
+    "same", "new", "newest",
+}
+BRANCH_NOUN_RE = re.compile(r"\b((?:[\w'.&-]+\s+){1,3})(?:branch(?:es)?|locations?|offices?)\b", re.I)
+BRANCH_PREP_RE = re.compile(r"\b(?:branch(?:es)?|location|office)\s+(?:in|at|on)\s+([A-Za-z][\w'.-]+(?:\s+[A-Z][\w'.-]+)?)", re.I)
+
+
+def _branch_word(w: str) -> str:
+    """Normalise one question word for the trim/drop checks ("Dupaco's," -> "dupaco")."""
+    w = w.lower().strip(".,!?\"'")
+    return w[:-2] if w.endswith("'s") else w
+
+
+def _branch_casual(text: str, drop_tokens: FrozenSet[str]) -> Optional[str]:
+    """Fallback for phrasings the capitalised pattern misses: lowercase names ("dyersville branch hours")
+    and the nouns location/office ("hours for the asbury location")."""
+    for m in BRANCH_NOUN_RE.finditer(text):
+        words = m.group(1).split()
+        while words and (_branch_word(words[0]) in BRANCH_LEAD_TRIM or _branch_word(words[0]) in drop_tokens):
+            words.pop(0)
+        words = [w for w in words if _branch_word(w) not in drop_tokens
+                 and _branch_word(w) not in ("branch", "branches", "location", "locations", "office", "offices", "cu")]
+        if words and all(re.fullmatch(r"[\w'.&-]+", w) and re.search(r"[A-Za-z]", w) for w in words):
+            name = " ".join(w.strip(".,!?\"'") for w in words)
+            return name if any(c.isupper() for c in name) else name.title()
+    return None
+
 
 def _branch(text: str, drop_tokens: FrozenSet[str] = frozenset()) -> Optional[str]:
     """'the Riverside Example CU branch' -> 'Riverside' (the institution's own name is dropped)."""
@@ -193,10 +228,11 @@ def _branch(text: str, drop_tokens: FrozenSet[str] = frozenset()) -> Optional[st
         words = [w for w in m.group(1).split() if w.lower() not in drop_tokens and w.lower() not in ("branch", "cu")]
         if words and words[0].lower() not in NOT_A_BRANCH:
             return " ".join(words)
-    m = re.search(r"\b[Bb]ranch\s+(?:in|at|on)\s+([A-Z][\w'.-]+(?:\s+[A-Z][\w'.-]+)?)", text)
-    if m:
-        return m.group(1)
-    return None
+    m = BRANCH_PREP_RE.search(text)
+    if m and _branch_word(m.group(1).split()[0]) not in drop_tokens | NOT_A_BRANCH:
+        name = m.group(1)
+        return name if any(c.isupper() for c in name) else name.title()
+    return _branch_casual(text, drop_tokens)
 
 
 def parse_rules(question: str, drop_tokens: FrozenSet[str] = frozenset()) -> Query:
@@ -266,7 +302,7 @@ def _detect_metric(q: Query, low: str) -> None:
         q.metric, q.metric_explicit = "dividend_rate", True
     elif re.search(r"\bapr\b", low):
         q.metric, q.metric_explicit = "apr", True
-    elif re.search(r"\brates?\b|interest|percent|pay|earn|how much", low):
+    elif re.search(r"\brates?\b|interest|percent|pay|earn|how much|%", low):
         q.metric = "rate"
     if q.metric == "rate" and q.family:      # "rate" means APY for deposits and APR for loans
         q.metric = "apy" if q.family in DEPOSIT_FAMILIES else ("rate" if q.family == "mortgage" else "apr")
@@ -318,10 +354,16 @@ def _detect_qualifiers(q: Query, text: str, low: str) -> None:
         q.superlative = "min" if all(w in ("lowest", "minimum", "cheapest", "least") for w in sups) else "max"
 
 
+SOFT_RATE_RE = re.compile(r"%|\bpercent(?:age)?\b|\binterest\b")
+FEE_NOUN_RE = re.compile(r"\b(fees?|surcharge|penalt(?:y|ies)|service charge)\b")
+
+
 def _detect_fee(q: Query, low: str) -> None:
     """A fee question keeps the product family it names (for the free-text fallback) but is answered as a fee."""
     if not FEE_RE.search(low) or re.search(r"\b(apy|apr|dividend|interest rate|yield)\b", low) or q.metric in ("min_open", "min_earn"):
         return
+    if SOFT_RATE_RE.search(low) and not FEE_NOUN_RE.search(low):
+        return                               # "what % does the rewards visa charge" asks for a rate, not a fee
     if q.family is None or q.family_weak or q.family == "credit_card" and re.search(r"debit|replace|lost|rush", low):
         q.family, q.family_weak = "fee", False
     q.metric = "fee"

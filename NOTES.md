@@ -116,7 +116,7 @@ cannot place ("rate on a used pickup from 2019, 5 year loan"), so it stays avail
 | --- | --- |
 | Practice set (40 questions, `eval/public_eval.jsonl`) | 0.969; the one miss has an empty `must_include` list and needs the LLM judge |
 | Harness self-test fixture (synthetic site, conflicts gold) | 1.0 |
-| Extra paraphrase, as-of, change and fee set (35 questions, `eval/extra_eval.jsonl`) | 1.0 |
+| Extra paraphrase, as-of, change and fee set (40 questions, `eval/extra_eval.jsonl`) | 1.0 |
 
 The extra set was written from reading the snapshots, before the system handled those cases, and is used as a
 regression set. Both question sets quote the credit union's data, so they are not committed to this public
@@ -126,7 +126,7 @@ tests, the self-test and, when the files are present, both question sets.
 ## Code quality
 
 - `ruff check submission tests scripts` passes with the rule set in `pyproject.toml`.
-- 73 tests on synthetic fixtures cover table parsing, prose extraction, the query parser, the store and index,
+- 76 tests on synthetic fixtures cover table parsing, prose extraction, the query parser, the store and index,
   conflicts, the LLM merge (stubbed client), every answer handler, and two-snapshot end-to-end flows. Line
   coverage is 90%.
 - CI runs lint, tests and the harness self-test on Python 3.9, 3.11 and 3.12.

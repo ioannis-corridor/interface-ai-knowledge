@@ -99,6 +99,37 @@ def test_query_entities_and_dates():
     assert q.entity is None and q.intent == "fee"
 
 
+def test_branch_from_casual_phrasings():
+    drop = frozenset({"example", "cu"})
+    assert parse_rules("birchwood branch hours", drop).branch == "Birchwood"
+    q = parse_rules("when does the birchwood location open?", drop)
+    assert (q.entity, q.branch) == ("hours_lobby", "Birchwood")
+    q = parse_rules("hours for the elm street office", drop)
+    assert (q.entity, q.branch) == ("hours_lobby", "Elm Street")
+    assert parse_rules("where is your riverside location?", drop).branch == "Riverside"
+    # no branch is invented for generic, aggregate or count questions
+    assert parse_rules("what are your lobby hours", drop).branch is None
+    assert parse_rules("Do all Example CU branches keep the same lobby hours?", drop).branch is None
+    assert parse_rules("How many branch office locations are there?", drop).branch is None
+    assert parse_rules("hours at the nearest branch", drop).branch is None
+
+
+def test_rate_words_beat_fee_routing():
+    q = parse_rules("what % does the rewards visa charge")
+    assert (q.intent, q.product, q.metric) == ("fact", "Rewards Visa", "apr")
+    q = parse_rules("what interest do you charge on a 36-month personal loan?")
+    assert (q.intent, q.family, q.term_months, q.metric) == ("fact", "personal_loan", 36, "apr")
+    # explicit fee nouns still win, with or without rate words nearby
+    assert parse_rules("Is there a fee for a lost debit card?").intent == "fee"
+    assert parse_rules("What does an outgoing domestic wire cost?").intent == "fee"
+
+
+def test_terse_count_questions():
+    assert parse_rules("Branch count?").entity == "branch_count"
+    assert parse_rules("member count").entity == "member_count"
+    assert parse_rules("employee count?").entity == "employee_count"
+
+
 def test_tokenizer_and_number_fingerprint():
     assert tokenize("Our CDs and car loans") == ["certificate", "auto", "loan"]
     assert numbers_in("5.39% APR and $1,000 minimum") == {("%", 5.39), ("$", 1000.0)}
