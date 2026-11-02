@@ -1,6 +1,11 @@
-# website snapshots are shared for this event only: never commit them
+# the credit union's data is shared for this event only: never commit the
+# snapshots, the kit files that describe them, or question sets quoting them
 snapshots/0*
+snapshots/README.md
 snapshots_zip/
+eval/public_eval.jsonl
+eval/extra_eval.jsonl
+docs/kit-README.md
 # scorer output, caches, secrets
 results/
 __pycache__/

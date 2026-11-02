@@ -10,7 +10,7 @@ import os
 import re
 from typing import Optional
 
-DEFAULT_MODEL = os.environ.get("KS_LLM_MODEL", "claude-haiku-5-5")
+DEFAULT_MODEL = os.environ.get("KS_LLM_MODEL", "claude-haiku-4-5")
 TIMEOUT_S = float(os.environ.get("KS_LLM_TIMEOUT", "3"))
 
 SCHEMA = """Return ONLY a JSON object with these keys (use null when the question does not say):

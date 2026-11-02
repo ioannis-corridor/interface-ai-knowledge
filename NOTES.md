@@ -35,11 +35,11 @@ Authority only matters when two sources disagree on the same fact. The order is:
 1. Higher authority class wins. The rate sheet beats a calculator or a promo page.
 2. Newer "effective as of" date wins.
 3. For prose facts, the newer article date wins. The branch count comes from the newest press release that
-   states one, so "17 branch office locations" beats older releases that say 18 or 19.
+   states one, so it beats older releases with other counts.
 4. Newer crawl wins.
 
-A page is not stale because it is old. The partner-store closing date comes from a 2025 release that nothing
-newer contradicts.
+A page is not stale because it is old. A branch's closing date can come from a years-old release that
+nothing newer contradicts.
 
 Absence from the authoritative source is a signal too, and it is applied where candidates are selected, so
 every rate intent (one value, list, verify, change, superlative) sees the same rule. A rate sheet or product page
@@ -94,7 +94,7 @@ deterministic, and that is the configuration to grade.
 An optional LLM question parser exists as an experiment. It is off unless both `KS_USE_LLM=1` and
 `ANTHROPIC_API_KEY` are set in the environment of the process running the scorer (for example
 `KS_USE_LLM=1 ANTHROPIC_API_KEY=... python harness/run_eval.py ...`). When on, the system makes one call to
-`claude-haiku-5-5` for a question the rules cannot classify. The call returns a structured query only; it never
+`claude-haiku-4-5` for a question the rules cannot classify. The call returns a structured query only; it never
 sees website text and never writes answer text. Each call has a 3-second cap and any error falls back to the
 rules. `KS_LLM_MODEL` changes the model. Measured on the practice set the parser changes no answers and adds
 about 0.8 seconds at p95, which is why it is opt-in: the kit's own `--judge` option reads the same key variable,
@@ -110,7 +110,9 @@ cannot place ("rate on a used pickup from 2019, 5 year loan"), so it stays avail
 | Extra paraphrase, as-of, change and fee set (35 questions, `eval/extra_eval.jsonl`) | 1.0 |
 
 The extra set was written from reading the snapshots, before the system handled those cases, and is used as a
-regression set. `scripts/check.sh` runs lint, the unit tests, the self-test and both question sets.
+regression set. Both question sets quote the credit union's data, so they are not committed to this public
+repository; they ship alongside the kit data (see `eval/README.md`). `scripts/check.sh` runs lint, the unit
+tests, the self-test and, when the files are present, both question sets.
 
 ## Code quality
 

@@ -9,15 +9,17 @@ not say. [`NOTES.md`](NOTES.md) explains the approach.
 ```
 submission/          the solution (solution.py with build(), package ks/)
 harness/             the organisers' scorer, unchanged
-eval/                the 40 practice questions (unchanged) plus extra_eval.jsonl, 35 regression questions of our own
+eval/                the question sets go here (not committed; see eval/README.md)
 starter/             the organisers' naive baseline, unchanged
 tests/               unit tests on synthetic fixtures
-docs/                design notes and kit README
+docs/                design notes
 snapshots/           website crawls go here (not committed)
 ```
 
-The website snapshots are not in this repository. Put the five zips in `snapshots_zip/`, or unzip them into
-`snapshots/`, before you run the scorer.
+The credit union's data is shared for this event only, so none of it is in this public repository:
+neither the snapshots nor the question sets that quote its rates and URLs. Before you run the scorer,
+put the five zips in `snapshots_zip/` (or unzip them into `snapshots/`) and copy the kit's
+`eval/public_eval.jsonl` into `eval/`.
 
 ## Run
 
@@ -36,7 +38,7 @@ No key is stored in the repository, and the rule-based parser handles every ques
 
 ```bash
 pip install pytest ruff
-scripts/check.sh                   # lint, 71 tests (90% line coverage), harness self-test, both question sets
+scripts/check.sh                   # lint, 71 tests (90% line coverage), harness self-test, both question sets when present
 ```
 
 Or step by step:
@@ -49,8 +51,12 @@ python harness/run_eval.py --submission submission --snapshots harness/selftest/
 python harness/run_eval.py --submission submission --eval eval/extra_eval.jsonl --repeat-sample 0
 ```
 
-The GitHub Actions workflow in `.github/workflows/ci.yml` runs all three on Python 3.9, 3.11 and 3.12. The real
-snapshots are not available in CI, so the scorer there uses the harness's own synthetic self-test site.
+The last command needs `eval/extra_eval.jsonl`, our regression set, which ships alongside the kit data
+(see [`eval/README.md`](eval/README.md)).
+
+The GitHub Actions workflow in `.github/workflows/ci.yml` runs lint, the tests and the self-test on Python
+3.9, 3.11 and 3.12. The real snapshots and question sets are not available in CI, so the scorer there uses
+the harness's own synthetic self-test site.
 
 ## Code map
 
