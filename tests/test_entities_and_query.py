@@ -128,6 +128,19 @@ def test_terse_count_questions():
     assert parse_rules("Branch count?").entity == "branch_count"
     assert parse_rules("member count").entity == "member_count"
     assert parse_rules("employee count?").entity == "employee_count"
+    assert parse_rules("member total?").entity == "member_count"
+    assert parse_rules("total members?").entity == "member_count"
+    assert parse_rules("branch total").entity == "branch_count"
+    assert parse_rules("staff tally").entity == "employee_count"
+    assert parse_rules("What are your total assets?").entity == "assets"
+
+
+def test_yes_no_branch_question_checks_closure():
+    q = parse_rules("do you folks still run the riverside location?")
+    assert (q.entity, q.branch, q.intent) == ("closure", "Riverside", "status")
+    # neither a product question nor one without an operation word turns into a closure check
+    assert parse_rules("Do you have an ATM at the riverside location?").entity is None
+    assert parse_rules("Do you still offer Bright Savings at the riverside branch?").entity is None
 
 
 def test_tokenizer_and_number_fingerprint():

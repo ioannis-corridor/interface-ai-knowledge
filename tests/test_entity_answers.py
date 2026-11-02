@@ -135,6 +135,8 @@ def test_closure_status_with_alternatives():
     assert "March 31, 2026" in b.text
     c = ks.answer("Is the Riverton branch closing?")
     assert not c.confident
+    d = ks.answer("do you folks still run the riverside location?")
+    assert d.text.startswith("No.") and "March 31, 2026" in d.text
 
 
 def test_eligibility_contact_update_and_phone():

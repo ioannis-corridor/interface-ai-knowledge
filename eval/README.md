@@ -6,7 +6,7 @@ scorer:
 
 - `public_eval.jsonl` — the 40 practice questions. Comes with the official kit; copy it from
   there into this directory.
-- `extra_eval.jsonl` — our own 40-question regression set (paraphrases, as-of dates, changes,
+- `extra_eval.jsonl` — our own 42-question regression set (paraphrases, as-of dates, changes,
   fees), written from reading the snapshots. Ships alongside the kit data, not in the repo.
 
 `scripts/check.sh` skips both runs when the files are absent. The synthetic harness self-test

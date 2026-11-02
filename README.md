@@ -50,7 +50,7 @@ contradictions, and `/quit` exits.
 
 ```bash
 pip install pytest ruff
-scripts/check.sh                   # lint, 76 tests (90% line coverage), harness self-test, both question sets when present
+scripts/check.sh                   # lint, 77 tests (90% line coverage), harness self-test, both question sets when present
 ```
 
 Or step by step:

@@ -127,7 +127,7 @@ class EntityAnswers(AnswerBase):
                          f"Please contact {self.org} to confirm.", confident=False)
         win = newest(mine)
         when = parse_long_date(win.value)
-        asks_if_open = re.search(r"still open|open today|is it open|remain open", q.raw, re.I)
+        asks_if_open = re.search(r"still (?:open|around|run(?:ning)?|operat\w+)|open today|is it open|remain open", q.raw, re.I)
         if asks_if_open and when and when <= ref_date:
             text = f"No. The {q.branch} branch was scheduled to close {win.value}."
         elif asks_if_open:

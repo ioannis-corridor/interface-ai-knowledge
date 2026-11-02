@@ -48,9 +48,9 @@ PRODUCT_PATTERNS = [
 ENTITY_PATTERNS = [
     ("routing", r"routing (?:number|#|no)|\baba\b"),
     ("phone", r"\b(phone|telephone|call you|contact number|customer service number|member service number)\b"),
-    ("branch_count", r"how many (?:\w+ ){0,2}(?:branch|location|office)|number of (?:branch|location)|\b(?:branch(?:es)?|locations?|offices?) count\b|count of (?:branch|location|office)"),
-    ("employee_count", r"how many (?:\w+ ){0,2}(?:employees|staff|people)(?:\s+(?:does|do|work|are|at|in)\b|\s*\?|\s*$)|number of employees|how many people work|\b(?:employee|staff) count\b|\bheadcount\b"),
-    ("member_count", r"how many members|number of members|membership (?:size|count)|\bmember count\b"),
+    ("branch_count", r"how many (?:\w+ ){0,2}(?:branch|location|office)|number of (?:branch|location)|\b(?:branch(?:es)?|locations?|offices?) (?:count|total|tally)\b|count of (?:branch|location|office)|\btotal (?:number of )?(?:branches|locations|offices)\b"),
+    ("employee_count", r"how many (?:\w+ ){0,2}(?:employees|staff|people)(?:\s+(?:does|do|work|are|at|in)\b|\s*\?|\s*$)|number of employees|how many people work|\b(?:employee|staff) (?:count|total|tally)\b|\bheadcount\b|\btotal (?:number of )?(?:employees|staff)\b"),
+    ("member_count", r"how many members|number of members|membership (?:size|count)|\bmember(?:ship)?s? (?:count|total|tally)\b|\btotal (?:number of )?members\b"),
     ("assets", r"total assets|assets (?:under|of)|how (?:big|large) is"),
     ("forbes", r"\bforbes\b"),
     ("eligibility", r"\beligib\w*|\bwho can (?:join|become|open)|\bqualif\w* (?:for|to) (?:join|member)|\bhow (?:do|can) i (?:join|become a member)|\brequirements? (?:to|for) (?:join|member)|\bmembership requirements?"),
@@ -69,6 +69,7 @@ LIST_RE = re.compile(r"\b(what|which)\b.*\b(do you (?:offer|have)|are (?:there|a
 DESCRIBE_RE = re.compile(r"^\s*(tell me about|what is|what's|whats|describe|explain|what are the (?:benefits|features)|how does .* work)\b", re.I)
 SUPERLATIVE_RE = re.compile(r"\b(highest|best|top|maximum|max|most|lowest|minimum|cheapest)\b", re.I)
 VERIFY_RE = re.compile(r"^\s*(do|does|is|are|can|did|will|has|have)\b", re.I)
+STILL_RUNNING_RE = re.compile(r"\b(still|open|run(?:ning)?|operat\w+)\b", re.I)
 REPEAT_RE = re.compile(r"\b(repeat|again|one more time|once more)\b", re.I)
 FEE_RE = re.compile(r"\b(fees?|charges?|cost|costs|surcharge|penalt(?:y|ies))\b|how much (?:is|are|does|do you charge|for|to|will)", re.I)
 AS_OF_RE = re.compile(r"\b(?:as of|back in|in|during|on)\s+(?:(\d{1,2})\s+)?(january|february|march|april|may|june|july|august|september|october|november|december)(?:\s+(\d{1,2}))?,?\s+(20\d\d)\b", re.I)
@@ -194,7 +195,8 @@ BRANCH_LEAD_TRIM = NOT_A_BRANCH | {
     "why", "who", "and", "or", "for", "at", "in", "on", "of", "to", "from", "about", "hours", "hour", "lobby",
     "time", "open", "opens", "opened", "close", "closes", "closed", "closing", "visit", "go", "get", "find",
     "see", "tell", "give", "know", "need", "want", "many", "much", "there", "near", "local", "nearby", "other",
-    "same", "new", "newest",
+    "same", "new", "newest", "still", "run", "runs", "running", "operate", "operates", "operating", "keep",
+    "folks", "guys", "y'all", "yall",
 }
 BRANCH_NOUN_RE = re.compile(r"\b((?:[\w'.&-]+\s+){1,3})(?:branch(?:es)?|locations?|offices?)\b", re.I)
 BRANCH_PREP_RE = re.compile(r"\b(?:branch(?:es)?|location|office)\s+(?:in|at|on)\s+([A-Za-z][\w'.-]+(?:\s+[A-Z][\w'.-]+)?)", re.I)
@@ -265,6 +267,11 @@ def _detect_entity(q: Query, text: str, low: str, drop_tokens: FrozenSet[str] = 
     q.branch = _branch(text, drop_tokens)
     if q.entity == "address" and not q.branch and not re.search(r"\bbranch|office|location", low):
         q.entity = None
+    # A yes/no question about a named branch being open or operating consults the closure facts whatever
+    # the verb ("do you folks still run the hy-vee location?"); product questions are left alone.
+    if q.entity is None and q.branch and VERIFY_RE.match(text) and STILL_RUNNING_RE.search(low) \
+            and not _detect(FAMILY_PATTERNS, low):
+        q.entity = "closure"
 
 
 def _detect_family_and_product(q: Query, low: str) -> None:
