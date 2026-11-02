@@ -33,8 +33,8 @@ def test_within_snapshot_tiers_merge_and_cross_snapshot_change_is_reported():
                snapshot_id="01", authority=100, term_months=12, quote="r"))
     s.add(Fact(family="certificate", product="12 Month Certificate", metric="apy", value="3.40%", url="https://x.test/rates",
                snapshot_id="02", authority=100, term_months=12, quote="r"))
-    s.add(entity("02", "https://x.test/news/old", "24", date(2024, 1, 1)))
-    s.add(entity("02", "https://x.test/news/new", "22", date(2026, 5, 1)))
+    s.add(entity("02", "https://x.test/news/old", "19", date(2024, 1, 1)))
+    s.add(entity("02", "https://x.test/news/new", "17", date(2026, 5, 1)))
 
     out = find_conflicts(s)
     topics = {e["topic"]: e for e in out}
@@ -46,7 +46,7 @@ def test_within_snapshot_tiers_merge_and_cross_snapshot_change_is_reported():
     cert = topics["12-month certificate APY"]
     assert cert["values"] == ["3.40%", "2.90%"] and cert["resolution"] == "3.40%"
     branches = topics["number of branches"]
-    assert branches["resolution"] == "22" and set(branches["values"]) == {"22", "24"}
+    assert branches["resolution"] == "17" and set(branches["values"]) == {"17", "19"}
 
 
 def test_needs_llm_only_when_rules_find_nothing():

@@ -101,9 +101,9 @@ def build():
 def test_newest_release_wins_for_counts_and_awards():
     ks = build()
     branches = ks.answer("How many branches does Example CU have?")
-    assert "22" in branches.text and "23" not in branches.text and "23" in (branches.conflict_note or "")
+    assert "17" in branches.text and "18" not in branches.text and "18" in (branches.conflict_note or "")
     forbes = ks.answer("What recognition has Example CU received from Forbes?")
-    assert "fifth" in forbes.text and "fourth" not in forbes.text
+    assert "third" in forbes.text and "second" not in forbes.text
 
 
 def test_hours_specific_general_and_unknown_branch():

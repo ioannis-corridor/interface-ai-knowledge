@@ -81,8 +81,8 @@ fee schedule, the contact page) are.
 
 - Within the latest crawl, the same fact has different values on different pages. Example: the rate page
   shows the 60-month auto APR as 5.39% while a promo page still shows 5.34%.
-- Across crawls, the authoritative value changed. Example: the 12-month certificate APY moved from 2.90%
-  to 3.40%.
+- Across crawls, the authoritative value changed. Example: a certificate APY that moved between two
+  crawls' rate sheets.
 
 Sibling tiers that went stale together are one entry. Each entry names the winning value and the reason.
 

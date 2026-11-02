@@ -39,9 +39,9 @@ def test_prose_entities():
     facts = extract_entities(RELEASE, "https://example-cu.test/newsroom/riverside", "Riverside closure", "01", 60,
                              date(2025, 6, 20), None)
     by = {(f.product, f.metric): f.value for f in facts}
-    assert by[("branch count", "count")] == "22"
-    assert by[("employee count", "count")] == "700"
-    assert by[("Forbes recognition", "ordinal")] == "fifth"
+    assert by[("branch count", "count")] == "17"
+    assert by[("employee count", "count")] == "450"
+    assert by[("Forbes recognition", "ordinal")] == "third"
     assert by[("routing number", "id")] == "123456789"
     assert by[("Riverside branch", "close_date")] == "March 31, 2026"       # not the article date
     assert by[("Riverside branch", "hours_lobby")].startswith("Monday-Thursday: 8:30 a.m.-5 p.m.; Friday")
