@@ -188,7 +188,7 @@ NOT_A_BRANCH = {"the", "a", "which", "what", "any", "each", "every", "all", "you
 
 # Left-trimmed off a casually-phrased branch name ("when does the dyersville location open"): question words,
 # verbs and prepositions that can sit between the sentence start and the name. Trimming stops at the first
-# word that is none of these, so a real name ("Mullan Avenue", "Hy-Vee") is never shortened.
+# word that is none of these, so a real name ("Birch Avenue", "Oak-Hill") is never shortened.
 BRANCH_LEAD_TRIM = NOT_A_BRANCH | {
     "an", "this", "that", "its", "their", "his", "her", "i", "we", "you", "me", "they", "it",
     "is", "are", "was", "were", "does", "do", "did", "can", "could", "will", "would", "when", "where", "how",
@@ -203,7 +203,7 @@ BRANCH_PREP_RE = re.compile(r"\b(?:branch(?:es)?|location|office)\s+(?:in|at|on)
 
 
 def _branch_word(w: str) -> str:
-    """Normalise one question word for the trim/drop checks ("Dupaco's," -> "dupaco")."""
+    """Normalise one question word for the trim/drop checks ("Example's," -> "example")."""
     w = w.lower().strip(".,!?\"'")
     return w[:-2] if w.endswith("'s") else w
 
@@ -268,7 +268,7 @@ def _detect_entity(q: Query, text: str, low: str, drop_tokens: FrozenSet[str] = 
     if q.entity == "address" and not q.branch and not re.search(r"\bbranch|office|location", low):
         q.entity = None
     # A yes/no question about a named branch being open or operating consults the closure facts whatever
-    # the verb ("do you folks still run the hy-vee location?"); product questions are left alone.
+    # the verb ("do you folks still run the riverside location?"); product questions are left alone.
     if q.entity is None and q.branch and VERIFY_RE.match(text) and STILL_RUNNING_RE.search(low) \
             and not _detect(FAMILY_PATTERNS, low):
         q.entity = "closure"
